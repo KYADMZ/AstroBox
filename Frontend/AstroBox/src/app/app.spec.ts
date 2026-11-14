@@ -15,10 +15,12 @@ describe('App', () => {
     expect(app).toBeTruthy();
   });
 
-  it('should render title', async () => {
+  it('should render the AstroBox visualization controls', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Hello, AstroBox');
+    expect(compiled.querySelector('.brand-copy strong')?.textContent).toContain('ASTROBOX');
+    expect(compiled.querySelector('.visualization-controls')?.textContent).toContain('Wildfires');
+    expect(compiled.querySelector('.visualization-controls')?.textContent).toContain('Precipitation');
   });
 });
