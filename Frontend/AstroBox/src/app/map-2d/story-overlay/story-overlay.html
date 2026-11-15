@@ -1,0 +1,131 @@
+@if (player.isActive() && scene(); as currentScene) {
+  <section class="story-panel" aria-label="El Niño guided story">
+    <header class="story-panel-header">
+      <span class="eyebrow">
+        <span class="live-dot" [class.paused]="player.status() === 'paused'" aria-hidden="true"></span>
+        SCENE {{ sceneNumber() }} OF {{ sceneCount }}
+        @if (player.status() === 'paused') {
+          <span class="paused-tag">PAUSED</span>
+        }
+      </span>
+      <span class="story-time">{{ elapsedLabel() }} / {{ totalDurationLabel }}</span>
+    </header>
+
+    <ol class="scene-indicator" aria-label="Story scenes">
+      @for (indicator of sceneIndicators(); track indicator.id) {
+        <li
+          [class]="indicator.state"
+          [attr.aria-current]="indicator.state === 'current' ? 'step' : null"
+          [attr.title]="indicator.title"
+        >
+          <span class="scene-fill" [style.transform]="'scaleX(' + indicator.progress + ')'"></span>
+          <span class="visually-hidden">{{ indicator.title }}</span>
+        </li>
+      }
+    </ol>
+
+    <div aria-live="polite">
+      <h2 class="scene-title">{{ currentScene.title }}</h2>
+      <p class="scene-narration">{{ currentScene.narration }}</p>
+    </div>
+
+    @if (currentScene.summarySteps; as steps) {
+      <ol class="summary-steps" aria-label="Summary">
+        @for (step of steps; track step.title; let last = $last) {
+          <li>
+            <strong>{{ step.title }}</strong>
+            <span>{{ step.description }}</span>
+          </li>
+          @if (!last) {
+            <li class="summary-arrow" aria-hidden="true">→</li>
+          }
+        }
+      </ol>
+    }
+
+    @if (observedLayers().length > 0 || illustrativeCaptions().length > 0) {
+      <ul class="data-legend" aria-label="What the map shows">
+        @for (layer of observedLayers(); track layer.id) {
+          <li>
+            <span class="badge observed">Observed data</span>
+            <span
+              class="swatch"
+              [class.sst]="layer.id === 'seaSurfaceTemperatureAnomaly'"
+              [class.rain]="layer.id === 'precipitationRate'"
+              aria-hidden="true"
+            ></span>
+            <span>
+              {{ layer.label }}
+              <small>{{ layer.dateContext }}</small>
+              @if (layer.id === 'seaSurfaceTemperatureAnomaly') {
+                <small>Blue: cooler than usual · Red: warmer than usual</small>
+              }
+            </span>
+          </li>
+        }
+        @for (item of illustrativeCaptions(); track item.caption) {
+          <li>
+            <span class="badge illustrative">Illustrative</span>
+            <span class="swatch dashed" [style.border-color]="item.color" aria-hidden="true"></span>
+            <span>{{ item.caption }}</span>
+          </li>
+        }
+      </ul>
+    }
+
+    @if (player.layerError()) {
+      <p class="layer-warning" role="status">{{ player.layerError() }}</p>
+    }
+
+    <div class="story-progress" aria-hidden="true">
+      <span [style.width.%]="progressPercent()"></span>
+    </div>
+
+    <div class="story-controls" role="group" aria-label="Story playback controls">
+      <button type="button" class="primary" (click)="togglePause()">
+        @if (player.status() === 'paused') {
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6V4Z" /></svg>
+          Resume
+        } @else {
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5v10M13 5v10" /></svg>
+          Pause
+        }
+      </button>
+      <button type="button" (click)="restart()">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10a6 6 0 1 0 2-4.5M4 4v3.5h3.5" /></svg>
+        Restart
+      </button>
+      <button type="button" (click)="exit()" aria-keyshortcuts="Escape">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" /></svg>
+        Exit story
+      </button>
+    </div>
+  </section>
+} @else {
+  <section class="story-launcher" aria-label="El Niño guided story">
+    <span class="eyebrow">GUIDED STORY</span>
+    <strong>{{ story.title }}</strong>
+    <p>
+      @if (player.status() === 'completed') {
+        Story complete. Watch it again any time.
+      } @else {
+        {{ sceneCount }} scenes · about {{ totalDurationLabel }} min · the map moves on its own
+      }
+    </p>
+    <button
+      type="button"
+      class="primary"
+      [disabled]="!player.stageReady()"
+      (click)="start()"
+    >
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6V4Z" /></svg>
+      @if (!player.stageReady()) {
+        Preparing map…
+      } @else if (player.status() === 'completed') {
+        Watch again
+      } @else {
+        Start story
+      }
+    </button>
+  </section>
+}

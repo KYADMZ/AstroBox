@@ -13,11 +13,19 @@ import {
   SimpleChanges,
   inject,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type * as Cesium from 'cesium';
 import { FireObservation } from '../map.models';
+import { StoryPlayerService } from '../storytelling/story-player.service';
+import type { StoryLifecycleEvent } from '../storytelling/story.models';
+import { StoryMapDirector, type ToggleableMapItem } from './story-map-director';
+import { StoryOverlayComponent } from './story-overlay/story-overlay';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [StoryOverlayComponent],
+  // The story player is scoped to the 2D map: storytelling never reaches the 3D globe.
+  providers: [StoryPlayerService],
   selector: 'app-map-2d',
   styleUrl: './map-2d.scss',
   templateUrl: './map-2d.html',
@@ -29,6 +37,10 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() precipitationEnabled = false;
   @Output() mapErrorChange = new EventEmitter<string | null>();
   @Output() precipitationErrorChange = new EventEmitter<string | null>();
+  /** Re-emits every storytelling lifecycle event (for future mascot/audio integration). */
+  @Output() storyEvent = new EventEmitter<StoryLifecycleEvent>();
+  /** True while a guided story is playing or paused on the 2D map. */
+  @Output() storyActiveChange = new EventEmitter<boolean>();
 
   private readonly browser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -39,6 +51,17 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
   private precipitationDate?: string;
   private precipitationRequestId = 0;
   private destroyed = false;
+  private readonly storyPlayer = inject(StoryPlayerService);
+  private storyDirector?: StoryMapDirector;
+  /** Input changes received while a story is playing, applied once it ends. */
+  private pendingFireSync = false;
+  private pendingPrecipitationSync = false;
+
+  constructor() {
+    this.storyPlayer.events$
+      .pipe(takeUntilDestroyed())
+      .subscribe((event) => this.onStoryEvent(event));
+  }
 
   async ngAfterViewInit(): Promise<void> {
     if (!this.browser) {
@@ -49,19 +72,33 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    // While a story plays, the storytelling controller owns the map. Defer
+    // regular layer updates and apply them when the story ends.
+    const storyActive = this.storyPlayer.isActive();
     if (changes['fires'] || changes['wildfiresEnabled']) {
-      this.updateFireMarkers();
+      if (storyActive) {
+        this.pendingFireSync = true;
+      } else {
+        this.updateFireMarkers();
+      }
     }
     if (
       changes['monthKey'] ||
       changes['precipitationEnabled']
     ) {
-      this.syncPrecipitationLayer();
+      if (storyActive) {
+        this.pendingPrecipitationSync = true;
+      } else {
+        this.syncPrecipitationLayer();
+      }
     }
   }
 
   ngOnDestroy(): void {
     this.destroyed = true;
+    // Cancels any running story and restores the map before the viewer goes away.
+    this.storyPlayer.detachStage();
+    this.storyDirector = undefined;
     this.removePrecipitationLayer();
     this.viewer?.destroy();
   }
@@ -110,11 +147,49 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
       void this.viewer.dataSources.add(this.fireDataSource);
       this.updateFireMarkers();
       this.syncPrecipitationLayer();
+      this.attachStoryDirector(cesium, this.viewer);
     } catch (error) {
       if (!this.destroyed) {
         console.error('Unable to initialize the Cesium 2D map.', error);
         this.mapErrorChange.emit('The 2D map could not be loaded.');
       }
+    }
+  }
+
+  private attachStoryDirector(cesium: typeof Cesium, viewer: Cesium.Viewer): void {
+    this.storyDirector = new StoryMapDirector(cesium, viewer, {
+      getItemsToHide: () =>
+        [this.fireDataSource, this.precipitationLayer].filter(
+          (item): item is Cesium.CustomDataSource | Cesium.ImageryLayer => item !== undefined,
+        ) as ToggleableMapItem[],
+      onLayerError: (message) => this.storyPlayer.reportLayerError(message),
+    });
+    this.storyPlayer.attachStage(this.storyDirector);
+  }
+
+  private onStoryEvent(event: StoryLifecycleEvent): void {
+    this.storyEvent.emit(event);
+    if (event.type === 'storyStarted') {
+      this.storyActiveChange.emit(true);
+      return;
+    }
+    if (event.type === 'storyCompleted' || event.type === 'storyCancelled') {
+      this.storyActiveChange.emit(false);
+      this.applyPendingSync();
+    }
+  }
+
+  private applyPendingSync(): void {
+    if (this.destroyed) {
+      return;
+    }
+    if (this.pendingFireSync) {
+      this.pendingFireSync = false;
+      this.updateFireMarkers();
+    }
+    if (this.pendingPrecipitationSync) {
+      this.pendingPrecipitationSync = false;
+      this.syncPrecipitationLayer();
     }
   }
 

@@ -6,4 +6,5 @@ export interface FireObservation {
   latitude: number;
 }
 
-export type VisualizationId = 'wildfires' | 'precipitation';
+/** `seaTemperature` is only offered on the 3D globe. */
+export type VisualizationId = 'wildfires' | 'precipitation' | 'seaTemperature';

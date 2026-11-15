@@ -11,6 +11,11 @@ import {
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import type * as Cesium from 'cesium';
+import {
+  GIBS_SEA_SURFACE_TEMPERATURE_ANOMALY_LAYER,
+  createGibsWmsProvider,
+  toIsoDate,
+} from './gibs/gibs-wms';
 import { Map2DComponent } from './map-2d/map-2d';
 import type { FireObservation, VisualizationId } from './map.models';
 
@@ -36,6 +41,8 @@ interface MonthOption {
 interface VisualizationOption {
   id: VisualizationId;
   label: string;
+  /** Restricts the visualization to one map mode. Omitted: available in both. */
+  mapMode?: '3d' | '2d';
 }
 
 @Component({
@@ -57,6 +64,9 @@ export class App implements AfterViewInit, OnDestroy {
   private precipitationLayer?: Cesium.ImageryLayer;
   private precipitationDate?: string;
   private precipitationRequestId = 0;
+  private seaTemperatureLayer?: Cesium.ImageryLayer;
+  private seaTemperatureLayerDate?: string;
+  private seaTemperatureRequestId = 0;
   private playInterval?: number;
   private destroyed = false;
 
@@ -65,7 +75,13 @@ export class App implements AfterViewInit, OnDestroy {
   protected readonly visualizations: VisualizationOption[] = [
     { id: 'wildfires', label: 'Wildfires' },
     { id: 'precipitation', label: 'Precipitation' },
+    { id: 'seaTemperature', label: 'Sea temperature anomaly', mapMode: '3d' },
   ];
+  protected readonly availableVisualizations = computed(() =>
+    this.visualizations.filter(
+      (visualization) => !visualization.mapMode || visualization.mapMode === this.mapMode(),
+    ),
+  );
   protected readonly selectedMonthIndex = signal(this.months.length - 1);
   protected readonly selectedMonth = computed(
     () => this.months[this.selectedMonthIndex()],
@@ -78,6 +94,17 @@ export class App implements AfterViewInit, OnDestroy {
   protected readonly isPlaying = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly precipitationError = signal<string | null>(null);
+  protected readonly seaTemperatureError = signal<string | null>(null);
+  protected readonly seaTemperatureOpacity = signal(0.7);
+  protected readonly seaTemperatureOpacityPercent = computed(() =>
+    Math.round(this.seaTemperatureOpacity() * 100),
+  );
+  /** Date requested from GIBS for the selected month (see seaTemperatureDateForMonth). */
+  protected readonly seaTemperatureDate = computed(() =>
+    this.seaTemperatureDateForMonth(this.selectedMonth().key),
+  );
+  /** True while the guided El Niño story is running on the 2D map. */
+  protected readonly storyActive = signal(false);
   protected readonly sliderProgress = computed(
     () => (this.selectedMonthIndex() / (this.months.length - 1)) * 100,
   );
@@ -127,6 +154,7 @@ export class App implements AfterViewInit, OnDestroy {
     }
 
     this.mapMode.set('3d');
+    this.storyActive.set(false);
     window.setTimeout(() => void this.initializeMap(), 0);
   }
 
@@ -136,6 +164,23 @@ export class App implements AfterViewInit, OnDestroy {
 
   protected onMap2DPrecipitationError(message: string | null): void {
     this.precipitationError.set(message);
+  }
+
+  protected onMap2DStoryActiveChange(active: boolean): void {
+    this.storyActive.set(active);
+  }
+
+  protected onSeaTemperatureOpacityInput(event: Event): void {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const opacity = Math.min(Math.max(Number(input.value), 0), 1);
+    this.seaTemperatureOpacity.set(opacity);
+    if (this.seaTemperatureLayer) {
+      this.seaTemperatureLayer.alpha = opacity;
+    }
   }
 
   protected toggleVisualization(id: VisualizationId): void {
@@ -358,6 +403,9 @@ export class App implements AfterViewInit, OnDestroy {
     if (this.isVisualizationEnabled('precipitation')) {
       this.loadPrecipitation(`${this.selectedMonth().key}-01`);
     }
+    if (this.isVisualizationEnabled('seaTemperature')) {
+      this.loadSeaTemperature(this.seaTemperatureDate());
+    }
   }
 
   private syncVisualizationLayers(): void {
@@ -372,6 +420,11 @@ export class App implements AfterViewInit, OnDestroy {
       this.loadPrecipitation(`${this.selectedMonth().key}-01`);
     } else {
       this.removePrecipitationLayer();
+    }
+    if (this.isVisualizationEnabled('seaTemperature')) {
+      this.loadSeaTemperature(this.seaTemperatureDate());
+    } else {
+      this.removeSeaTemperatureLayer();
     }
   }
 
@@ -437,7 +490,74 @@ export class App implements AfterViewInit, OnDestroy {
     this.precipitationError.set(null);
   }
 
+  /**
+   * GHRSST MUR anomalies are daily. The middle of the month represents the
+   * selected month; for the current month the most recent day that is likely
+   * published (about two days of latency) is used instead.
+   */
+  private seaTemperatureDateForMonth(monthKey: string): string {
+    const midMonth = new Date(`${monthKey}-15T00:00:00Z`);
+    const latestAvailable = new Date(
+      Date.UTC(this.now.getUTCFullYear(), this.now.getUTCMonth(), this.now.getUTCDate() - 2),
+    );
+    return toIsoDate(midMonth < latestAvailable ? midMonth : latestAvailable);
+  }
+
+  private loadSeaTemperature(date: string): void {
+    if (!this.viewer || !this.cesium || this.viewer.isDestroyed()) {
+      return;
+    }
+    if (this.seaTemperatureLayer && this.seaTemperatureLayerDate === date) {
+      return;
+    }
+
+    this.removeSeaTemperatureLayer();
+    const requestId = this.seaTemperatureRequestId;
+    this.seaTemperatureError.set(null);
+
+    try {
+      const provider = createGibsWmsProvider(this.cesium, {
+        layer: GIBS_SEA_SURFACE_TEMPERATURE_ANOMALY_LAYER,
+        time: date,
+        credit: 'NASA JPL GHRSST MUR / NASA GIBS',
+      });
+
+      provider.errorEvent.addEventListener((error) => {
+        if (requestId !== this.seaTemperatureRequestId || this.destroyed) {
+          return;
+        }
+        console.error('Unable to load NASA GHRSST sea surface temperature anomalies.', error);
+        this.seaTemperatureError.set(
+          `Sea temperature anomaly imagery is unavailable for ${date}.`,
+        );
+      });
+
+      this.seaTemperatureLayer = this.viewer.imageryLayers.addImageryProvider(provider);
+      this.seaTemperatureLayer.alpha = this.seaTemperatureOpacity();
+      this.seaTemperatureLayerDate = date;
+      // Keep precipitation readable above the ocean temperature layer.
+      if (this.precipitationLayer) {
+        this.viewer.imageryLayers.raiseToTop(this.precipitationLayer);
+      }
+    } catch (error) {
+      console.error('Unable to create the sea surface temperature anomaly layer.', error);
+      this.seaTemperatureLayerDate = undefined;
+      this.seaTemperatureError.set('Sea temperature anomaly imagery could not be loaded.');
+    }
+  }
+
+  private removeSeaTemperatureLayer(): void {
+    this.seaTemperatureRequestId += 1;
+    if (this.seaTemperatureLayer && this.viewer && !this.viewer.isDestroyed()) {
+      this.viewer.imageryLayers.remove(this.seaTemperatureLayer, true);
+    }
+    this.seaTemperatureLayer = undefined;
+    this.seaTemperatureLayerDate = undefined;
+    this.seaTemperatureError.set(null);
+  }
+
   private destroy3DMap(): void {
+    this.removeSeaTemperatureLayer();
     this.removePrecipitationLayer();
     this.viewer?.destroy();
     this.viewer = undefined;

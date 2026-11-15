@@ -485,6 +485,30 @@
   box-shadow: 0 0 8px rgba(82, 201, 210, 0.65);
 }
 
+.toggle-dot.sea-temperature {
+  background: #e05a4f;
+}
+
+.sst-legend {
+  width: 22px;
+  height: 7px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #2c5fa8, #f1f1f1, #c62f2f);
+}
+
+.opacity-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #8d9b94;
+  font-size: 9px;
+
+  input {
+    width: 80px;
+    accent-color: #e05a4f;
+  }
+}
+
 .layer-error {
   color: #ffad8b;
   font-size: 9px;

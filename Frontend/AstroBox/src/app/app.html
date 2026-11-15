@@ -45,46 +45,56 @@
         [precipitationEnabled]="isVisualizationEnabled('precipitation')"
         (mapErrorChange)="onMap2DError($event)"
         (precipitationErrorChange)="onMap2DPrecipitationError($event)"
+        (storyActiveChange)="onMap2DStoryActiveChange($event)"
       />
     }
     <div class="map-vignette" aria-hidden="true"></div>
 
-    <div class="map-legend" aria-label="Map legend">
-      @if (isVisualizationEnabled('wildfires')) {
-        <span class="legend-item">
-          <span class="legend-marker" aria-hidden="true"></span>
-          <span>Reported wildfire</span>
-        </span>
-      }
-      @if (isVisualizationEnabled('precipitation')) {
-        <span class="legend-item">
-          <span class="precipitation-legend" aria-hidden="true"></span>
-          <span>GPM precipitation rate · {{ selectedMonth().key }}-01</span>
-        </span>
-      }
-    </div>
+    <!-- Hidden during the 2D guided story so the narration stays the focus. -->
+    @if (!storyActive()) {
+      <div class="map-legend" aria-label="Map legend">
+        @if (isVisualizationEnabled('wildfires')) {
+          <span class="legend-item">
+            <span class="legend-marker" aria-hidden="true"></span>
+            <span>Reported wildfire</span>
+          </span>
+        }
+        @if (isVisualizationEnabled('precipitation')) {
+          <span class="legend-item">
+            <span class="precipitation-legend" aria-hidden="true"></span>
+            <span>GPM precipitation rate · {{ selectedMonth().key }}-01</span>
+          </span>
+        }
+        @if (mapMode() === '3d' && isVisualizationEnabled('seaTemperature')) {
+          <span class="legend-item">
+            <span class="sst-legend" aria-hidden="true"></span>
+            <span>Sea temperature anomaly · {{ seaTemperatureDate() }} · blue cooler, red warmer</span>
+          </span>
+        }
+      </div>
 
-    <aside class="activity-card" aria-live="polite">
-      <div class="activity-card-top">
-        <span class="eyebrow">SELECTED MONTH</span>
-        <span class="activity-indicator"></span>
-      </div>
-      <strong class="activity-month">{{ selectedMonth().label }}</strong>
-      <div class="activity-count">
-        <span>{{ selectedMonthFires().length }}</span>
-        <span class="count-caption">reported<br />fire locations</span>
-      </div>
-      <div class="activity-rule"></div>
-      @if (isLoading()) {
-        <p class="activity-status">Loading NASA fire events…</p>
-      } @else if (errorMessage()) {
-        <p class="activity-status error-text">{{ errorMessage() }}</p>
-      } @else if (selectedMonthFires().length === 0) {
-        <p class="activity-status">No wildfire events reported for this month.</p>
-      } @else {
-        <p class="activity-status">Events reported by NASA EONET</p>
-      }
-    </aside>
+      <aside class="activity-card" aria-live="polite">
+        <div class="activity-card-top">
+          <span class="eyebrow">SELECTED MONTH</span>
+          <span class="activity-indicator"></span>
+        </div>
+        <strong class="activity-month">{{ selectedMonth().label }}</strong>
+        <div class="activity-count">
+          <span>{{ selectedMonthFires().length }}</span>
+          <span class="count-caption">reported<br />fire locations</span>
+        </div>
+        <div class="activity-rule"></div>
+        @if (isLoading()) {
+          <p class="activity-status">Loading NASA fire events…</p>
+        } @else if (errorMessage()) {
+          <p class="activity-status error-text">{{ errorMessage() }}</p>
+        } @else if (selectedMonthFires().length === 0) {
+          <p class="activity-status">No wildfire events reported for this month.</p>
+        } @else {
+          <p class="activity-status">Events reported by NASA EONET</p>
+        }
+      </aside>
+    }
 
     <div class="map-attribution">Map tiles © OpenStreetMap contributors</div>
   </section>
@@ -129,7 +139,7 @@
     <div class="visualization-row">
       <div class="visualization-controls" role="group" aria-label="Map visualizations">
         <span class="visualization-label">SHOW ON MAP</span>
-        @for (visualization of visualizations; track visualization.id) {
+        @for (visualization of availableVisualizations(); track visualization.id) {
           <button
             class="visualization-toggle"
             [class.is-active]="isVisualizationEnabled(visualization.id)"
@@ -141,14 +151,32 @@
               class="toggle-dot"
               [class.wildfires]="visualization.id === 'wildfires'"
               [class.precipitation]="visualization.id === 'precipitation'"
+              [class.sea-temperature]="visualization.id === 'seaTemperature'"
               aria-hidden="true"
             ></span>
             <span>{{ visualization.label }}</span>
           </button>
         }
+        @if (mapMode() === '3d' && isVisualizationEnabled('seaTemperature')) {
+          <label class="opacity-control">
+            <span>Opacity {{ seaTemperatureOpacityPercent() }}%</span>
+            <input
+              type="range"
+              min="0.1"
+              max="1"
+              step="0.05"
+              [value]="seaTemperatureOpacity()"
+              aria-label="Sea temperature anomaly layer opacity"
+              (input)="onSeaTemperatureOpacityInput($event)"
+            />
+          </label>
+        }
       </div>
       @if (precipitationError()) {
         <span class="layer-error" role="status">{{ precipitationError() }}</span>
+      }
+      @if (mapMode() === '3d' && seaTemperatureError()) {
+        <span class="layer-error" role="status">{{ seaTemperatureError() }}</span>
       }
     </div>
 
@@ -177,7 +205,7 @@
         <span class="note-dot"></span>
         <span>Layers can be combined or turned off</span>
       </div>
-      <span class="data-credit">WILDFIRES: NASA EONET · PRECIPITATION: NASA GPM IMERG / GIBS</span>
+      <span class="data-credit">WILDFIRES: NASA EONET · PRECIPITATION: NASA GPM IMERG / GIBS · SEA TEMPERATURE: GHRSST MUR / GIBS</span>
     </div>
   </section>
 </main>
