@@ -16,12 +16,37 @@
     <div class="topbar-meta">
       <span class="data-source"><span class="status-dot"></span> NASA EONET DATA</span>
       <span class="topbar-divider"></span>
-      <span class="global-label">GLOBAL VIEW</span>
+      <nav class="view-navigation" aria-label="Map view">
+        <button
+          type="button"
+          [class.active]="mapMode() === '3d'"
+          [attr.aria-pressed]="mapMode() === '3d'"
+          (click)="selectMapMode('3d')"
+        >3D map</button>
+        <button
+          type="button"
+          [class.active]="mapMode() === '2d'"
+          [attr.aria-pressed]="mapMode() === '2d'"
+          (click)="selectMapMode('2d')"
+        >2D map</button>
+      </nav>
     </div>
   </header>
 
   <section class="map-stage" aria-label="Global wildfire and precipitation map">
-    <div #mapContainer class="cesium-map" aria-label="Interactive 3D globe with map visualizations"></div>
+    @if (mapMode() === '3d') {
+      <div #mapContainer class="cesium-map" aria-label="Interactive 3D globe with map visualizations"></div>
+    } @else {
+      <app-map-2d
+        class="cesium-map"
+        [fires]="selectedMonthFires()"
+        [monthKey]="selectedMonth().key"
+        [wildfiresEnabled]="isVisualizationEnabled('wildfires')"
+        [precipitationEnabled]="isVisualizationEnabled('precipitation')"
+        (mapErrorChange)="onMap2DError($event)"
+        (precipitationErrorChange)="onMap2DPrecipitationError($event)"
+      />
+    }
     <div class="map-vignette" aria-hidden="true"></div>
 
     <div class="map-legend" aria-label="Map legend">

@@ -114,8 +114,43 @@
   background: var(--panel-border);
 }
 
-.global-label {
-  color: var(--muted);
+.view-navigation {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+
+  button {
+    min-height: 28px;
+    padding: 0 11px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: #84928b;
+    cursor: pointer;
+    font: inherit;
+    font-size: 9px;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    transition: color 150ms ease, background 150ms ease;
+
+    &:hover {
+      color: #e3ebe5;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #b5f4e3;
+      outline-offset: 2px;
+    }
+
+    &.active {
+      background: rgba(200, 215, 205, 0.12);
+      color: #e3ebe5;
+    }
+  }
 }
 
 .map-stage {
@@ -142,28 +177,6 @@
     linear-gradient(0deg, rgba(13, 20, 22, 0.22), transparent 34%);
 }
 
-.map-heading {
-  position: absolute;
-  z-index: 2;
-  top: 38px;
-  left: 44px;
-  pointer-events: none;
-
-  h1 {
-    margin: 14px 0 8px;
-    color: #f0f3ef;
-    font-size: clamp(26px, 3vw, 38px);
-    font-weight: 520;
-    letter-spacing: -0.045em;
-  }
-
-  p {
-    margin: 0;
-    color: #a3b0aa;
-    font-size: 13px;
-  }
-}
-
 .eyebrow {
   display: flex;
   align-items: center;
@@ -172,12 +185,6 @@
   font-size: 9px;
   font-weight: 650;
   letter-spacing: 0.15em;
-}
-
-.eyebrow-line {
-  width: 18px;
-  height: 1px;
-  background: var(--accent);
 }
 
 .map-legend {
@@ -599,19 +606,14 @@
     font-size: 8px;
   }
 
-  .topbar-divider,
-  .global-label {
+  .topbar-divider {
     display: none;
   }
 
-  .map-heading {
-    top: 26px;
-    left: 20px;
-
-    p {
-      max-width: 190px;
-      font-size: 11px;
-    }
+  .view-navigation button {
+    min-height: 26px;
+    padding: 0 8px;
+    font-size: 8px;
   }
 
   .activity-card {

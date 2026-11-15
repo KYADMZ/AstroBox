@@ -11,13 +11,8 @@ import {
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import type * as Cesium from 'cesium';
-
-interface MonthOption {
-  key: string;
-  label: string;
-  shortLabel: string;
-  year: number;
-}
+import { Map2DComponent } from './map-2d/map-2d';
+import type { FireObservation, VisualizationId } from './map.models';
 
 interface EonetGeometry {
   date: string;
@@ -31,15 +26,12 @@ interface EonetEvent {
   geometry: EonetGeometry[];
 }
 
-interface FireObservation {
-  id: string;
-  title: string;
-  date: string;
-  longitude: number;
-  latitude: number;
+interface MonthOption {
+  key: string;
+  label: string;
+  shortLabel: string;
+  year: number;
 }
-
-type VisualizationId = 'wildfires' | 'precipitation';
 
 interface VisualizationOption {
   id: VisualizationId;
@@ -48,6 +40,7 @@ interface VisualizationOption {
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Map2DComponent],
   selector: 'app-root',
   styleUrl: './app.scss',
   templateUrl: './app.html',
@@ -68,6 +61,7 @@ export class App implements AfterViewInit, OnDestroy {
   private destroyed = false;
 
   protected readonly months = this.createMonths();
+  protected readonly mapMode = signal<'3d' | '2d'>('3d');
   protected readonly visualizations: VisualizationOption[] = [
     { id: 'wildfires', label: 'Wildfires' },
     { id: 'precipitation', label: 'Precipitation' },
@@ -94,7 +88,7 @@ export class App implements AfterViewInit, OnDestroy {
   private readonly fireObservations = signal<FireObservation[]>([]);
 
   async ngAfterViewInit(): Promise<void> {
-    if (!this.browser) {
+    if (!this.browser || this.mapMode() !== '3d') {
       return;
     }
 
@@ -119,6 +113,29 @@ export class App implements AfterViewInit, OnDestroy {
 
   protected isVisualizationEnabled(id: VisualizationId): boolean {
     return this.enabledVisualizations().has(id);
+  }
+
+  protected selectMapMode(mode: '3d' | '2d'): void {
+    if (this.mapMode() === mode) {
+      return;
+    }
+
+    if (mode === '2d') {
+      this.destroy3DMap();
+      this.mapMode.set('2d');
+      return;
+    }
+
+    this.mapMode.set('3d');
+    window.setTimeout(() => void this.initializeMap(), 0);
+  }
+
+  protected onMap2DError(message: string | null): void {
+    this.errorMessage.set(message);
+  }
+
+  protected onMap2DPrecipitationError(message: string | null): void {
+    this.precipitationError.set(message);
   }
 
   protected toggleVisualization(id: VisualizationId): void {
@@ -166,6 +183,10 @@ export class App implements AfterViewInit, OnDestroy {
   }
 
   private async initializeMap(): Promise<void> {
+    if (!this.browser || this.destroyed || this.mapMode() !== '3d') {
+      return;
+    }
+
     try {
       (globalThis as typeof globalThis & { CESIUM_BASE_URL?: string }).CESIUM_BASE_URL =
         '/assets/cesium/';
@@ -414,6 +435,14 @@ export class App implements AfterViewInit, OnDestroy {
     this.precipitationLayer = undefined;
     this.precipitationDate = undefined;
     this.precipitationError.set(null);
+  }
+
+  private destroy3DMap(): void {
+    this.removePrecipitationLayer();
+    this.viewer?.destroy();
+    this.viewer = undefined;
+    this.fireDataSource = undefined;
+    this.cesium = undefined;
   }
 
   private updateMapMarkers(): void {
