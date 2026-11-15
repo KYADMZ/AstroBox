@@ -13,7 +13,7 @@ import type { EnvironmentTargets } from '../zone-probe.models';
 import { ZoneProbeStore } from '../zone-probe.store';
 import { EnvironmentEffectsEngine } from './environment-effects.engine';
 
-const NO_EFFECTS: EnvironmentTargets = { rain: 0, fire: 0, windSpeedMs: 0 };
+const NO_EFFECTS: EnvironmentTargets = { rain: 0, snow: 0, fire: 0, windSpeedMs: 0 };
 
 /**
  * Full-map weather effects for the zone under Verny: background rain and

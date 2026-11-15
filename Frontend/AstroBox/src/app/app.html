@@ -4,7 +4,7 @@
       <img class="brand-mascot" src="astro-mascot.png" alt="" width="160" height="158" />
       <span class="brand-copy">
         <strong>ASTRO<span>BOX</span></strong>
-        <small>Earth observation frontier</small>
+        <small>Earth observation jukebox</small>
       </span>
     </a>
 
@@ -26,6 +26,15 @@
     </nav>
 
     <div class="topbar-tools">
+    <button
+      type="button"
+      class="tour-button"
+      aria-label="Open the quick guide"
+      title="Quick guide"
+      (click)="soundMixerOpen.set(false); tour.start()"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6M12 16.8v.2" /></svg>
+    </button>
     <div class="sound-controls">
       <button
         type="button"
@@ -219,3 +228,4 @@
     </footer>
   </section>
 </main>
+<app-quick-tour />

@@ -1,0 +1,32 @@
+/*
+ * Shared "glow card": the whole card is outlined in its accent color, with a
+ * soft glow behind it and a raised (embossed) front: a light top edge, a
+ * darker bottom edge and a faint tinted gradient.
+ *
+ * Usage: @include glow-card.glow-card(var(--reading-color, var(--astro-teal-bright)));
+ */
+@mixin glow-card($color) {
+  --card-color: #{$color};
+  border: 1px solid color-mix(in srgb, var(--card-color) 72%, transparent);
+  border-radius: 0.35rem;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--card-color) 18%, transparent) 0%,
+      color-mix(in srgb, var(--card-color) 6%, transparent) 55%,
+      rgba(0, 0, 0, 0.18) 100%
+    ),
+    rgba(10, 14, 26, 0.74);
+  box-shadow:
+    /* Glow behind the card. */
+    0 0 0.85rem color-mix(in srgb, var(--card-color) 30%, transparent),
+    0 0.35rem 0.8rem rgba(0, 0, 0, 0.35),
+    /* Relief in front: lit top edge, shaded bottom edge, tinted core. */
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.38),
+    inset 0 0 0.9rem color-mix(in srgb, var(--card-color) 14%, transparent);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background 150ms ease;
+}

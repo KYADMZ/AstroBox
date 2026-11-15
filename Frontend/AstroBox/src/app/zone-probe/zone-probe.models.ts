@@ -3,6 +3,15 @@ import type { GeoPoint } from '../map.models';
 /** Which Verny drawing to show. */
 export type ZoneMood = 'cold' | 'neutral' | 'hot';
 
+/**
+ * Verny's animation, chosen from the strongest phenomenon at its location
+ * (null = the static mood drawing, e.g. in cold zones).
+ */
+export type VernyAnimation = 'burning' | 'rain' | 'wind' | 'heat' | 'wave';
+
+/** Whether precipitation falls as rain or snow. */
+export type PrecipitationPhase = 'rain' | 'snow';
+
 export type PrecipitationLevel = 'none' | 'light' | 'moderate' | 'heavy' | 'veryHeavy';
 
 /** Where the mascot is: resting in its dock, being dragged, or dropped on the map. */
@@ -21,6 +30,10 @@ export const ZONE_THRESHOLDS = {
   fireRadiusKm: 100,
   /** Wildfires counted for context and flame intensity (km). */
   fireContextRadiusKm: 300,
+  /** Precipitation falls as snow at or below this air temperature (°C, 2 m). */
+  snowAirTemperatureC: 0.5,
+  /** At or below this temperature the zone is "frozen": light snow in the background (°C). */
+  frozenTemperatureC: 0,
   /** Daily precipitation thresholds (mm/day). */
   precipitationMmPerDay: {
     light: 0.2,
@@ -65,6 +78,8 @@ export interface FireSummary {
 /** Target strengths (0–1) for the on-screen environment effects. */
 export interface EnvironmentTargets {
   rain: number;
+  /** Snowfall / frozen-zone flurries strength (0–1), drawn behind the rain. */
+  snow: number;
   fire: number;
   /** Wind speed (m/s), used to slant the rain. */
   windSpeedMs: number;

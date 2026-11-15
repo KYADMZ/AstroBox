@@ -21,6 +21,7 @@ import {
 } from './gibs/gibs-wms';
 import { LayerPanelComponent, type LayerPanelOption } from './layer-panel/layer-panel';
 import { Map2DComponent } from './map-2d/map-2d';
+import { QuickTourComponent, QuickTourService } from './quick-tour/quick-tour';
 import type { FireObservation, VisualizationId } from './map.models';
 import {
   CLIMATE_CLASSES,
@@ -84,6 +85,7 @@ const WILDFIRE_SWATCH = '#ff8555';
     ZoneStatusComponent,
     EnvironmentEffectsComponent,
     WindLayerComponent,
+    QuickTourComponent,
   ],
   host: {
     '(document:keydown)': 'onKeydown($event)',
@@ -173,6 +175,9 @@ export class App implements AfterViewInit, OnDestroy {
     }
   });
 
+  /** Quick user guide (spotlight + tooltips, under 30 seconds). */
+  protected readonly tour = inject(QuickTourService);
+
   /** Procedural rain, wind, fire and climate-zone sounds for the zone under Verny. */
   protected readonly soundscape = inject(SoundscapeService);
   protected readonly soundCategories = SOUND_CATEGORIES;
@@ -184,7 +189,7 @@ export class App implements AfterViewInit, OnDestroy {
   );
   private readonly soundscapeSync = effect(() => {
     if (this.storyActive()) {
-      this.soundscape.setZone({ targets: { rain: 0, fire: 0, windSpeedMs: 0 }, whistle: 0, ambience: null });
+      this.soundscape.setZone({ targets: { rain: 0, snow: 0, fire: 0, windSpeedMs: 0 }, whistle: 0, ambience: null });
       return;
     }
     const placed = this.zoneProbe.phase() === 'placed';
@@ -264,6 +269,8 @@ export class App implements AfterViewInit, OnDestroy {
       return;
     }
 
+    // Offer the quick guide on the first visit, once the interface is on screen.
+    window.setTimeout(() => this.tour.startIfFirstVisit(), 1200);
     await Promise.all([this.initializeMap(), this.loadWildfires()]);
   }
 
@@ -354,6 +361,10 @@ export class App implements AfterViewInit, OnDestroy {
 
   /** Keyboard shortcuts shown in the hint bar: Q/E map mode, L layers, Space timeline. */
   protected onKeydown(event: KeyboardEvent): void {
+    if (this.tour.active()) {
+      // The quick guide handles its own keys.
+      return;
+    }
     if (event.key === 'Escape' && this.soundMixerOpen()) {
       this.soundMixerOpen.set(false);
       return;

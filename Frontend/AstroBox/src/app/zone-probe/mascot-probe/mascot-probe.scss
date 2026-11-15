@@ -1,3 +1,5 @@
+@use '../../shared/glow-card';
+
 :host {
   position: absolute;
   z-index: 5;
@@ -39,8 +41,7 @@
 .dock-caption {
   max-width: 7rem;
   padding: 0.35rem 0.6rem;
-  border-left: 2px solid var(--astro-teal-bright);
-  background: rgba(5, 7, 14, 0.72);
+  @include glow-card.glow-card(var(--astro-teal-bright));
   color: var(--astro-cream);
   font-size: 0.72rem;
   font-weight: 600;
@@ -113,6 +114,29 @@
     &.is-active {
       opacity: 1;
     }
+  }
+
+  /* Some animations move around a wider frame: enlarge them to match. */
+  img.anim[data-anim="wind"],
+  img.anim[data-anim="heat"],
+  img.anim[data-anim="burning"] {
+    inset: -18%;
+    width: 136%;
+    height: 136%;
+  }
+
+  img.anim[data-anim="wave"] {
+    inset: -6%;
+    width: 112%;
+    height: 112%;
+  }
+
+  &[data-animation="burning"] img.is-active {
+    filter: drop-shadow(0 0 0.7rem rgba(255, 110, 60, 0.85));
+  }
+
+  &[data-animation="rain"] img.is-active {
+    filter: drop-shadow(0 0 0.6rem rgba(90, 170, 255, 0.7));
   }
 
   &[data-mood="hot"] img.is-active {

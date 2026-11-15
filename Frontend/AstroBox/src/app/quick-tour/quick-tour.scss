@@ -1,0 +1,163 @@
+@use '../shared/glow-card';
+
+:host {
+  font-family: var(--astro-font);
+}
+
+.tour-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  /* The spotlight's huge shadow does the dimming; this layer only blocks clicks. */
+  background: transparent;
+}
+
+.tour-spotlight {
+  position: fixed;
+  z-index: 1001;
+  border: 2px solid var(--astro-teal-bright);
+  border-radius: 0.5rem;
+  box-shadow:
+    0 0 0 200vmax rgba(3, 5, 12, 0.66),
+    0 0 1.2rem rgba(108, 211, 224, 0.75),
+    inset 0 0 0.8rem rgba(108, 211, 224, 0.35);
+  pointer-events: none;
+  transition:
+    top 320ms ease,
+    left 320ms ease,
+    width 320ms ease,
+    height 320ms ease;
+}
+
+.tour-tooltip {
+  position: fixed;
+  z-index: 1002;
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.85rem 0.95rem 0.9rem;
+  @include glow-card.glow-card(var(--astro-teal-bright));
+  background:
+    linear-gradient(180deg, rgba(72, 144, 170, 0.22), transparent 4rem),
+    var(--astro-panel-solid);
+  color: var(--astro-text);
+  transition:
+    top 320ms ease,
+    left 320ms ease;
+  animation: tour-in 220ms ease-out;
+
+  header,
+  footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  h2 {
+    margin: 0;
+    color: var(--astro-cream);
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  p {
+    margin: 0;
+    color: var(--astro-text-muted);
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+
+  button {
+    min-height: 1.9rem;
+    padding: 0 0.85rem;
+    border: 1px solid var(--astro-panel-border);
+    border-radius: 0.3rem;
+    background: rgba(5, 6, 10, 0.4);
+    color: var(--astro-text);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+
+    &:hover:not(:disabled) {
+      border-color: var(--astro-teal-bright);
+      color: var(--astro-teal-bright);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--astro-teal-bright);
+      outline-offset: 2px;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    &.primary {
+      border-color: var(--astro-teal-bright);
+      background: rgba(108, 211, 224, 0.16);
+      color: var(--astro-teal-bright);
+    }
+  }
+}
+
+.tour-count {
+  color: var(--astro-teal-bright);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+.tour-tooltip .tour-skip {
+  min-height: 1.6rem;
+  padding: 0 0.5rem;
+  border-color: transparent;
+  background: none;
+  color: var(--astro-text-muted);
+}
+
+.tour-progress {
+  display: flex;
+  gap: 0.25rem;
+
+  span {
+    flex: 1;
+    height: 0.18rem;
+    background: rgba(255, 255, 255, 0.14);
+
+    &.done {
+      background: var(--astro-teal-bright);
+    }
+
+    &.current {
+      background: linear-gradient(90deg, var(--astro-teal-bright) 50%, rgba(255, 255, 255, 0.14) 50%);
+      background-size: 200% 100%;
+      background-position: 100% 0;
+      animation: tour-step 4s linear forwards;
+    }
+  }
+}
+
+@keyframes tour-step {
+  to {
+    background-position: 0 0;
+  }
+}
+
+@keyframes tour-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.3rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-spotlight,
+  .tour-tooltip {
+    transition: none;
+    animation: none;
+  }
+}

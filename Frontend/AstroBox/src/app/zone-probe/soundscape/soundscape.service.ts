@@ -25,7 +25,7 @@ export interface ZoneSoundInput {
 }
 
 const SILENT_ZONE: ZoneSoundInput = {
-  targets: { rain: 0, fire: 0, windSpeedMs: 0 },
+  targets: { rain: 0, snow: 0, fire: 0, windSpeedMs: 0 },
   whistle: 0,
   ambience: null,
 };

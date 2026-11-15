@@ -17,6 +17,7 @@
   [class.is-dragging]="store.phase() === 'dragging'"
   [class.is-placed]="store.phase() === 'placed'"
   [attr.data-mood]="store.mood()"
+  [attr.data-animation]="activeAnimation()"
   [attr.aria-label]="ariaLabel()"
   (pointerdown)="onPointerDown($event)"
   (pointermove)="onPointerMove($event)"
@@ -29,10 +30,23 @@
   @for (mood of moods; track mood) {
     <img
       [src]="imageFor(mood)"
-      [class.is-active]="store.mood() === mood"
+      [class.is-active]="!activeAnimation() && store.mood() === mood"
       alt=""
       draggable="false"
       width="298"
+      height="320"
+    />
+  }
+  <!-- Animated Verny: burning feet, rain, wind, heat or waving. -->
+  @for (animation of animations; track animation) {
+    <img
+      class="anim"
+      [attr.data-anim]="animation"
+      [src]="animationFor(animation)"
+      [class.is-active]="activeAnimation() === animation"
+      alt=""
+      draggable="false"
+      width="320"
       height="320"
     />
   }

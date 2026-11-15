@@ -9,7 +9,9 @@ import {
   type EnvironmentTargets,
   type FireSummary,
   type PrecipitationLevel,
+  type PrecipitationPhase,
   type ProbePhase,
+  type VernyAnimation,
   type ZoneMood,
 } from './zone-probe.models';
 
@@ -124,10 +126,62 @@ export class ZoneProbeStore implements OnDestroy {
     precipitationLevel(this.climateState()?.precipitationMmPerDay ?? null),
   );
 
+  /**
+   * Rain or snow. Daily point data has no precipitation type, so the phase
+   * is inferred from the 2 m air temperature (snow at or below ~0.5 °C).
+   */
+  readonly precipitationPhase = computed<PrecipitationPhase | null>(() => {
+    const climate = this.climateState();
+    if (!climate || this.precipitationLevel() === 'none') {
+      return null;
+    }
+    const air = climate.airTemperatureC ?? climate.surfaceTemperatureC;
+    return air !== null && air <= ZONE_THRESHOLDS.snowAirTemperatureC ? 'snow' : 'rain';
+  });
+
+  /**
+   * Verny's animation: the phenomenon with the highest normalized value
+   * wins (rain, wind or heat). A nearby wildfire always wins ("burning
+   * feet"); calm places get a friendly wave; cold zones keep the static
+   * cold drawing.
+   */
+  readonly animation = computed<VernyAnimation | null>(() => {
+    if (!this.focus()) {
+      return null;
+    }
+    if (this.fires().countWithinRadius > 0) {
+      return 'burning';
+    }
+    const climate = this.climateState();
+    const temperature = this.temperatureC();
+    if (!climate || temperature === null) {
+      return null;
+    }
+    const rain =
+      this.precipitationPhase() === 'rain' ? rainIntensity(climate.precipitationMmPerDay) : 0;
+    const wind = Math.max(
+      clamp01(((climate.windSpeedMs ?? 0) - 3) / 9),
+      0.7 * clamp01(((climate.maxWindSpeedMs ?? 0) - 3) / 9),
+    );
+    const heat = clamp01((temperature - 26) / 14);
+    const cold = clamp01((ZONE_THRESHOLDS.coldTemperatureC - temperature) / 20);
+    const scores: [VernyAnimation | null, number][] = [
+      ['rain', rain],
+      ['wind', wind],
+      ['heat', heat],
+      [null, cold],
+    ];
+    const [winner, value] = scores.reduce((best, entry) => (entry[1] > best[1] ? entry : best));
+    if (value < 0.15) {
+      return 'wave';
+    }
+    return winner;
+  });
+
   /** Effects only run once the mascot has been dropped on the map. */
   readonly effectTargets = computed<EnvironmentTargets>(() => {
     if (this.phaseState() !== 'placed') {
-      return { rain: 0, fire: 0, windSpeedMs: 0 };
+      return { rain: 0, snow: 0, fire: 0, windSpeedMs: 0 };
     }
     const climate = this.climateState();
     const fires = this.fires();
@@ -140,8 +194,21 @@ export class ZoneProbeStore implements OnDestroy {
               0.3 * (1 - fires.nearestKm / ZONE_THRESHOLDS.fireRadiusKm),
           )
         : 0;
+    const precipitation = rainIntensity(climate?.precipitationMmPerDay ?? null);
+    const snowing = this.precipitationPhase() === 'snow';
+    // Frozen zones get light background flurries even without precipitation.
+    const temperatures = [climate?.airTemperatureC, climate?.surfaceTemperatureC].filter(
+      (value): value is number => value !== null && value !== undefined,
+    );
+    const coldest = temperatures.length > 0 ? Math.min(...temperatures) : null;
+    const flurries =
+      coldest !== null && coldest <= ZONE_THRESHOLDS.frozenTemperatureC
+        ? Math.min(0.6, 0.2 + (ZONE_THRESHOLDS.frozenTemperatureC - coldest) / 30)
+        : 0;
     return {
-      rain: rainIntensity(climate?.precipitationMmPerDay ?? null),
+      // When it is cold enough, precipitation falls as snow and replaces the rain.
+      rain: snowing ? 0 : precipitation,
+      snow: Math.max(flurries, snowing ? Math.max(precipitation, 0.3) : 0),
       fire,
       windSpeedMs: climate?.windSpeedMs ?? 0,
     };
@@ -337,6 +404,10 @@ export function precipitationLevel(mmPerDay: number | null): PrecipitationLevel 
  * (1 mm/day ≈ 0.1, 2.5 ≈ 0.2, 8 ≈ 0.5) and saturating near 22 mm/day,
  * so only really wet places get the heavy storm effect.
  */
+function clamp01(value: number): number {
+  return Math.min(Math.max(value, 0), 1);
+}
+
 export function rainIntensity(mmPerDay: number | null): number {
   const light = ZONE_THRESHOLDS.precipitationMmPerDay.light;
   if (mmPerDay === null || mmPerDay < light) {

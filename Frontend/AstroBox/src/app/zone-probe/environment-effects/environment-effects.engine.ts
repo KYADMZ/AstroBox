@@ -2,8 +2,9 @@ import type { EnvironmentTargets } from '../zone-probe.models';
 
 /**
  * Canvas effects driven by the zone under Verny:
- * - back canvas: falling rain streaks (slanted by wind) and flames rising
- *   from the bottom of the map;
+ * - back canvas: falling rain streaks (slanted by wind), snowflakes drifting
+ *   behind the rain (snowfall or frozen zones) and flames rising from the
+ *   bottom of the map;
  * - glass canvas: drops landing on the "screen" glass; big drops slide down
  *   and leave small droplets behind.
  *
@@ -42,6 +43,7 @@ const MAX_FLAME_PARTICLES = 320;
 const EASING_SECONDS = 0.9;
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
 const RAIN_DEPTH_BUCKETS = 3;
+const MAX_SNOWFLAKES = 520;
 
 export class EnvironmentEffectsEngine {
   private readonly backContext: CanvasRenderingContext2D;
@@ -50,14 +52,19 @@ export class EnvironmentEffectsEngine {
   private height = 0;
   private pixelRatio = 1;
 
-  private targets: EnvironmentTargets = { rain: 0, fire: 0, windSpeedMs: 0 };
+  private targets: EnvironmentTargets = { rain: 0, snow: 0, fire: 0, windSpeedMs: 0 };
   private rain = 0;
+  private snow = 0;
   private fire = 0;
   private wind = 0;
 
   private readonly streakX = new Float32Array(MAX_RAIN_STREAKS);
   private readonly streakY = new Float32Array(MAX_RAIN_STREAKS);
   private readonly streakDepth = new Float32Array(MAX_RAIN_STREAKS);
+  private readonly flakeX = new Float32Array(MAX_SNOWFLAKES);
+  private readonly flakeY = new Float32Array(MAX_SNOWFLAKES);
+  private readonly flakeDepth = new Float32Array(MAX_SNOWFLAKES);
+  private readonly flakePhase = new Float32Array(MAX_SNOWFLAKES);
   private readonly droplets: Droplet[] = [];
   private readonly flames: FlameParticle[] = [];
   private dropletSpawnDebt = 0;
@@ -67,6 +74,7 @@ export class EnvironmentEffectsEngine {
   private readonly dropletSprite: HTMLCanvasElement;
   private readonly flameSprites: HTMLCanvasElement[];
   private readonly emberSprite: HTMLCanvasElement;
+  private readonly flakeSprite: HTMLCanvasElement;
 
   private frameHandle?: number;
   private lastFrameAt?: number;
@@ -92,6 +100,7 @@ export class EnvironmentEffectsEngine {
       createGlowSprite('220, 60, 40'),
     ];
     this.emberSprite = createGlowSprite('255, 210, 120');
+    this.flakeSprite = createFlakeSprite();
   }
 
   setTargets(targets: EnvironmentTargets): void {
@@ -111,6 +120,9 @@ export class EnvironmentEffectsEngine {
     this.glassContext.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
     for (let index = 0; index < MAX_RAIN_STREAKS; index += 1) {
       this.resetStreak(index, true);
+    }
+    for (let index = 0; index < MAX_SNOWFLAKES; index += 1) {
+      this.resetFlake(index, true);
     }
     this.start();
   }
@@ -141,6 +153,7 @@ export class EnvironmentEffectsEngine {
 
     const ease = 1 - Math.exp(-dt / EASING_SECONDS);
     this.rain += (this.targets.rain - this.rain) * ease;
+    this.snow += (this.targets.snow - this.snow) * ease;
     this.fire += (this.targets.fire - this.fire) * ease;
     this.wind += (this.targets.windSpeedMs - this.wind) * ease;
     if (this.rain < 0.002 && this.targets.rain === 0) {
@@ -149,6 +162,9 @@ export class EnvironmentEffectsEngine {
     if (this.fire < 0.002 && this.targets.fire === 0) {
       this.fire = 0;
     }
+    if (this.snow < 0.002 && this.targets.snow === 0) {
+      this.snow = 0;
+    }
 
     this.drawBack(dt);
     this.drawGlass(dt);
@@ -156,6 +172,7 @@ export class EnvironmentEffectsEngine {
 
     const idle =
       this.rain === 0 &&
+      this.snow === 0 &&
       this.fire === 0 &&
       this.droplets.length === 0 &&
       this.flames.length === 0;
@@ -177,8 +194,55 @@ export class EnvironmentEffectsEngine {
       context.fillRect(0, 0, this.width, this.height);
     }
 
+    if (this.snow > 0) {
+      // Cold, pale light over frozen zones.
+      context.fillStyle = `rgba(210, 228, 255, ${(0.05 + 0.12 * this.snow).toFixed(3)})`;
+      context.fillRect(0, 0, this.width, this.height);
+    }
+
     this.drawFlames(context, dt);
+    // Snow sits behind the rain.
+    this.drawSnow(context, dt);
     this.drawRainStreaks(context, dt);
+  }
+
+  private drawSnow(context: CanvasRenderingContext2D, dt: number): void {
+    const scale = this.reducedMotion ? 0.35 : 1;
+    const active = Math.floor(MAX_SNOWFLAKES * scale * Math.pow(this.snow, 1.2));
+    if (active === 0) {
+      return;
+    }
+    const drift = Math.min(this.wind / 12, 1.4);
+    const time = performance.now() / 1000;
+    const visibility = Math.min(1, 0.55 + this.snow);
+    for (let index = 0; index < active; index += 1) {
+      const z = this.flakeDepth[index];
+      const fall = (28 + 70 * z) * (0.8 + 0.5 * this.snow);
+      const sway = this.reducedMotion ? 0 : Math.sin(time * (0.8 + z) + this.flakePhase[index]) * 22;
+      this.flakeY[index] += fall * dt;
+      this.flakeX[index] += (sway + fall * drift) * dt;
+      if (this.flakeY[index] > this.height + 12 || this.flakeX[index] > this.width + 20) {
+        this.resetFlake(index, false);
+      }
+      const size = 2 + z * 5;
+      context.globalAlpha = (0.35 + 0.6 * z) * visibility;
+      context.drawImage(
+        this.flakeSprite,
+        this.flakeX[index] - size,
+        this.flakeY[index] - size,
+        size * 2,
+        size * 2,
+      );
+    }
+    context.globalAlpha = 1;
+  }
+
+  private resetFlake(index: number, anywhere: boolean): void {
+    const driftRoom = this.height * 0.5;
+    this.flakeX[index] = Math.random() * (this.width + driftRoom) - driftRoom;
+    this.flakeY[index] = anywhere ? Math.random() * this.height : -Math.random() * 60 - 8;
+    this.flakeDepth[index] = Math.random();
+    this.flakePhase[index] = Math.random() * Math.PI * 2;
   }
 
   private drawRainStreaks(context: CanvasRenderingContext2D, dt: number): void {
@@ -440,6 +504,27 @@ function createDropletSprite(): HTMLCanvasElement {
   context.beginPath();
   context.ellipse(center - radius * 0.35, center - radius * 0.4, radius * 0.2, radius * 0.12, -0.6, 0, Math.PI * 2);
   context.fill();
+  return canvas;
+}
+
+/** Soft white snowflake with a faint dark halo, readable on light maps. */
+function createFlakeSprite(): HTMLCanvasElement {
+  const size = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return canvas;
+  }
+  const center = size / 2;
+  const halo = context.createRadialGradient(center, center, 0, center, center, center);
+  halo.addColorStop(0, 'rgba(255, 255, 255, 1)');
+  halo.addColorStop(0.45, 'rgba(240, 248, 255, 0.9)');
+  halo.addColorStop(0.62, 'rgba(60, 90, 130, 0.35)');
+  halo.addColorStop(1, 'rgba(60, 90, 130, 0)');
+  context.fillStyle = halo;
+  context.fillRect(0, 0, size, size);
   return canvas;
 }
 

@@ -1,3 +1,5 @@
+@use '../../shared/glow-card';
+
 /*
  * Story interface. Same frame language as the rest of AstroBox, but the
  * narration panel is very transparent and its neon text follows
@@ -161,8 +163,7 @@ button {
   display: grid;
   gap: 0.35rem;
   padding: 0.7rem 0.75rem 0.75rem;
-  border-left: 2px solid var(--astro-teal-bright);
-  background: rgba(255, 255, 255, 0.04);
+  @include glow-card.glow-card(var(--astro-teal-bright));
 
   strong {
     font-size: 1rem;

@@ -32,7 +32,10 @@ export class ZoneStatusComponent {
   protected readonly moodTitle = computed(() => MOOD_TITLES[this.store.mood()]);
   protected readonly moodImage = computed(() => `verny/verny-${this.store.mood()}.png`);
   protected readonly precipitationLabel = computed(
-    () => PRECIPITATION_LABELS[this.store.precipitationLevel()],
+    () => {
+      const label = PRECIPITATION_LABELS[this.store.precipitationLevel()];
+      return this.store.precipitationPhase() === 'snow' ? label.replace('rain', 'snow') : label;
+    },
   );
 
   /** "Jungle", "Desert"… the nature sounds played for the climate zone. */

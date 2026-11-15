@@ -9,7 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import type { GeoPoint } from '../../map.models';
-import type { MapProbeAdapter, ZoneMood } from '../zone-probe.models';
+import type { MapProbeAdapter, VernyAnimation, ZoneMood } from '../zone-probe.models';
 import { ZoneProbeStore } from '../zone-probe.store';
 
 /** Minimum time between live map samples while dragging (ms). */
@@ -49,6 +49,14 @@ export class MascotProbeComponent {
   private readonly mascot = viewChild.required<ElementRef<HTMLButtonElement>>('mascot');
 
   protected readonly moods: ZoneMood[] = ['cold', 'neutral', 'hot'];
+  protected readonly animations: VernyAnimation[] = ['burning', 'rain', 'wind', 'heat', 'wave'];
+  /**
+   * Animation shown right now: Verny waves from its dock; on the map it plays
+   * the animation of the strongest phenomenon below it (null = static drawing).
+   */
+  protected readonly activeAnimation = computed<VernyAnimation | null>(() =>
+    this.store.phase() === 'docked' ? 'wave' : this.store.animation(),
+  );
   protected readonly ariaLabel = computed(() => {
     switch (this.store.phase()) {
       case 'docked':
@@ -88,6 +96,10 @@ export class MascotProbeComponent {
 
   protected imageFor(mood: ZoneMood): string {
     return `verny/verny-${mood}.png`;
+  }
+
+  protected animationFor(animation: VernyAnimation): string {
+    return `verny/anim/verny-${animation}.webp`;
   }
 
   protected onPointerDown(event: PointerEvent): void {
