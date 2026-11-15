@@ -1,0 +1,82 @@
+@if (store.phase() !== 'docked') {
+  <section class="zone-panel" [attr.data-mood]="store.mood()" aria-label="Zone status" aria-live="polite">
+    <header class="zone-header">
+      <img class="zone-mascot" [src]="moodImage()" alt="" width="298" height="320" />
+      <div>
+        <span class="kicker">
+          ZONE SCAN
+          @if (store.phase() === 'dragging') {
+            <span class="live">LIVE</span>
+          }
+        </span>
+        <h2>{{ moodTitle() }}</h2>
+        <span class="coords">{{ coordinates() }}</span>
+      </div>
+    </header>
+
+    @if (store.climateStatus() === 'loading' && !store.climate()) {
+      <p class="scanning">Scanning NASA POWER data…</p>
+    }
+
+    <dl class="readings" [class.is-stale]="store.climateStatus() === 'loading'">
+      <div class="reading temperature">
+        <dt>Temperature</dt>
+        <dd>
+          <strong>{{ formatTemperature(store.climate()?.surfaceTemperatureC ?? null) }}</strong>
+          <small>surface · air {{ formatTemperature(store.climate()?.airTemperatureC ?? null) }}</small>
+        </dd>
+      </div>
+
+      <div class="reading precipitation">
+        <dt>Precipitation</dt>
+        <dd>
+          <strong>{{ formatPrecipitation(store.climate()?.precipitationMmPerDay ?? null) }}</strong>
+          <small>
+            {{ precipitationLabel() }} · wettest day
+            {{ formatPrecipitation(store.climate()?.maxPrecipitationMmPerDay ?? null) }}
+          </small>
+        </dd>
+      </div>
+
+      <div class="reading fires" [class.is-alert]="store.fires().countWithinRadius > 0">
+        <dt>Wildfires</dt>
+        <dd>
+          @if (store.fires().countWithinRadius > 0) {
+            <strong>{{ store.fires().countWithinRadius }} within {{ thresholds.fireRadiusKm }} km</strong>
+          } @else {
+            <strong>None within {{ thresholds.fireRadiusKm }} km</strong>
+          }
+          <small>
+            Nearest {{ formatDistance(store.fires().nearestKm) }} ·
+            {{ store.fires().countWithinContext }} within {{ thresholds.fireContextRadiusKm }} km
+          </small>
+        </dd>
+      </div>
+
+      <div class="reading wind">
+        <dt>Wind speed</dt>
+        <dd>
+          <strong>{{ formatWind(store.climate()?.windSpeedMs ?? null) }}</strong>
+          <small>10 m average · strongest day {{ formatWind(store.climate()?.maxWindSpeedMs ?? null) }}</small>
+        </dd>
+      </div>
+    </dl>
+
+    @if (store.climateError()) {
+      <p class="zone-error" role="status">{{ store.climateError() }}</p>
+    }
+
+    <footer class="zone-footer">
+      <span>
+        NASA POWER (MERRA-2) daily average
+        @if (period()) {
+          · {{ period() }}
+        }
+        · Fires: NASA EONET
+      </span>
+      @if (store.phase() === 'placed') {
+        <button type="button" (click)="returnToDock()">Return Verny</button>
+      }
+    </footer>
+  </section>
+}

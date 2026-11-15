@@ -15,11 +15,19 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type * as Cesium from 'cesium';
+import { createBasemapProvider } from '../basemap';
+import { GibsImageryLayerController } from '../gibs/gibs-layer-controller';
+import {
+  GIBS_LAND_SURFACE_TEMPERATURE_LAYER,
+  GIBS_SEA_SURFACE_TEMPERATURE_ANOMALY_LAYER,
+} from '../gibs/gibs-wms';
 import { FireObservation } from '../map.models';
 import { StoryPlayerService } from '../storytelling/story-player.service';
 import type { StoryLifecycleEvent } from '../storytelling/story.models';
 import { StoryMapDirector, type ToggleableMapItem } from './story-map-director';
 import { StoryOverlayComponent } from './story-overlay/story-overlay';
+import { createCesiumProbeAdapter } from '../zone-probe/cesium-probe-adapter';
+import type { MapProbeAdapter } from '../zone-probe/zone-probe.models';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -35,12 +43,23 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() monthKey = '';
   @Input() wildfiresEnabled = true;
   @Input() precipitationEnabled = false;
+  @Input() seaTemperatureEnabled = false;
+  /** ISO date requested from GIBS for the sea temperature anomaly layer. */
+  @Input() seaTemperatureDate = '';
+  @Input() seaTemperatureOpacity = 0.7;
+  @Input() surfaceTemperatureEnabled = false;
+  /** ISO date requested from GIBS for the land surface temperature layer. */
+  @Input() surfaceTemperatureDate = '';
   @Output() mapErrorChange = new EventEmitter<string | null>();
   @Output() precipitationErrorChange = new EventEmitter<string | null>();
+  @Output() seaTemperatureErrorChange = new EventEmitter<string | null>();
+  @Output() surfaceTemperatureErrorChange = new EventEmitter<string | null>();
   /** Re-emits every storytelling lifecycle event (for future mascot/audio integration). */
   @Output() storyEvent = new EventEmitter<StoryLifecycleEvent>();
   /** True while a guided story is playing or paused on the 2D map. */
   @Output() storyActiveChange = new EventEmitter<boolean>();
+  /** Lets the Verny zone probe pick and track places on this map. */
+  @Output() probeAdapterChange = new EventEmitter<MapProbeAdapter | null>();
 
   private readonly browser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -50,12 +69,16 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
   private precipitationLayer?: Cesium.ImageryLayer;
   private precipitationDate?: string;
   private precipitationRequestId = 0;
+  private seaTemperatureController?: GibsImageryLayerController;
+  private surfaceTemperatureController?: GibsImageryLayerController;
   private destroyed = false;
   private readonly storyPlayer = inject(StoryPlayerService);
   private storyDirector?: StoryMapDirector;
   /** Input changes received while a story is playing, applied once it ends. */
   private pendingFireSync = false;
   private pendingPrecipitationSync = false;
+  private pendingSeaTemperatureSync = false;
+  private pendingSurfaceTemperatureSync = false;
 
   constructor() {
     this.storyPlayer.events$
@@ -92,13 +115,33 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
         this.syncPrecipitationLayer();
       }
     }
+    if (changes['seaTemperatureOpacity']) {
+      this.seaTemperatureController?.setOpacity(this.seaTemperatureOpacity);
+    }
+    if (changes['seaTemperatureEnabled'] || changes['seaTemperatureDate']) {
+      if (storyActive) {
+        this.pendingSeaTemperatureSync = true;
+      } else {
+        this.syncSeaTemperatureLayer();
+      }
+    }
+    if (changes['surfaceTemperatureEnabled'] || changes['surfaceTemperatureDate']) {
+      if (storyActive) {
+        this.pendingSurfaceTemperatureSync = true;
+      } else {
+        this.syncSurfaceTemperatureLayer();
+      }
+    }
   }
 
   ngOnDestroy(): void {
     this.destroyed = true;
     // Cancels any running story and restores the map before the viewer goes away.
     this.storyPlayer.detachStage();
+    this.probeAdapterChange.emit(null);
     this.storyDirector = undefined;
+    this.seaTemperatureController?.hide();
+    this.surfaceTemperatureController?.hide();
     this.removePrecipitationLayer();
     this.viewer?.destroy();
   }
@@ -133,21 +176,57 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
         selectionIndicator: false,
         timeline: false,
       });
-      this.viewer.imageryLayers.addImageryProvider(
-        new cesium.UrlTemplateImageryProvider({
-          credit: '© OpenStreetMap contributors',
-          url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        }),
-      );
-      this.viewer.scene.globe.baseColor = cesium.Color.fromCssColorString('#102027');
+      // English place names (Esri); OpenStreetMap tiles use local-language labels.
+      this.viewer.imageryLayers.addImageryProvider(createBasemapProvider(cesium));
+      const globe = this.viewer.scene.globe;
+      globe.baseColor = cesium.Color.fromCssColorString('#161a2c');
+      // Smoother guided camera moves: keep more tiles cached and preload neighbors.
+      globe.tileCacheSize = 400;
+      globe.preloadSiblings = true;
       this.viewer.camera.setView({
         destination: cesium.Rectangle.fromDegrees(-180, -80, 180, 80),
       });
       this.fireDataSource = new cesium.CustomDataSource('Wildfires');
       void this.viewer.dataSources.add(this.fireDataSource);
+      this.seaTemperatureController = new GibsImageryLayerController(cesium, this.viewer, {
+        layer: GIBS_SEA_SURFACE_TEMPERATURE_ANOMALY_LAYER,
+        credit: 'NASA JPL GHRSST MUR / NASA GIBS',
+        label: 'Sea temperature anomaly',
+        opacity: this.seaTemperatureOpacity,
+        onError: (message) => {
+          if (!this.destroyed) {
+            this.seaTemperatureErrorChange.emit(message);
+          }
+        },
+        // Keep precipitation readable above the ocean temperature layer.
+        afterAdd: () => {
+          if (this.precipitationLayer && this.viewer && !this.viewer.isDestroyed()) {
+            this.viewer.imageryLayers.raiseToTop(this.precipitationLayer);
+          }
+        },
+      });
+      this.surfaceTemperatureController = new GibsImageryLayerController(cesium, this.viewer, {
+        layer: GIBS_LAND_SURFACE_TEMPERATURE_LAYER,
+        credit: 'NASA VIIRS NOAA-20 LST / NASA GIBS',
+        label: 'Surface temperature',
+        opacity: 0.75,
+        onError: (message) => {
+          if (!this.destroyed) {
+            this.surfaceTemperatureErrorChange.emit(message);
+          }
+        },
+        afterAdd: () => {
+          if (this.precipitationLayer && this.viewer && !this.viewer.isDestroyed()) {
+            this.viewer.imageryLayers.raiseToTop(this.precipitationLayer);
+          }
+        },
+      });
       this.updateFireMarkers();
       this.syncPrecipitationLayer();
+      this.syncSeaTemperatureLayer();
+      this.syncSurfaceTemperatureLayer();
       this.attachStoryDirector(cesium, this.viewer);
+      this.probeAdapterChange.emit(createCesiumProbeAdapter(cesium, this.viewer));
     } catch (error) {
       if (!this.destroyed) {
         console.error('Unable to initialize the Cesium 2D map.', error);
@@ -157,12 +236,22 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private attachStoryDirector(cesium: typeof Cesium, viewer: Cesium.Viewer): void {
+    const labelHost = this.host.nativeElement.querySelector<HTMLElement>('.story-label-layer');
+    if (!labelHost) {
+      throw new Error('The story label layer is unavailable.');
+    }
     this.storyDirector = new StoryMapDirector(cesium, viewer, {
       getItemsToHide: () =>
-        [this.fireDataSource, this.precipitationLayer].filter(
+        [
+          this.fireDataSource,
+          this.precipitationLayer,
+          this.seaTemperatureController?.imageryLayer,
+          this.surfaceTemperatureController?.imageryLayer,
+        ].filter(
           (item): item is Cesium.CustomDataSource | Cesium.ImageryLayer => item !== undefined,
         ) as ToggleableMapItem[],
       onLayerError: (message) => this.storyPlayer.reportLayerError(message),
+      labelHost,
     });
     this.storyPlayer.attachStage(this.storyDirector);
   }
@@ -190,6 +279,36 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (this.pendingPrecipitationSync) {
       this.pendingPrecipitationSync = false;
       this.syncPrecipitationLayer();
+    }
+    if (this.pendingSeaTemperatureSync) {
+      this.pendingSeaTemperatureSync = false;
+      this.syncSeaTemperatureLayer();
+    }
+    if (this.pendingSurfaceTemperatureSync) {
+      this.pendingSurfaceTemperatureSync = false;
+      this.syncSurfaceTemperatureLayer();
+    }
+  }
+
+  private syncSurfaceTemperatureLayer(): void {
+    if (!this.surfaceTemperatureController) {
+      return;
+    }
+    if (this.surfaceTemperatureEnabled && this.surfaceTemperatureDate) {
+      this.surfaceTemperatureController.show(this.surfaceTemperatureDate);
+    } else {
+      this.surfaceTemperatureController.hide();
+    }
+  }
+
+  private syncSeaTemperatureLayer(): void {
+    if (!this.seaTemperatureController) {
+      return;
+    }
+    if (this.seaTemperatureEnabled && this.seaTemperatureDate) {
+      this.seaTemperatureController.show(this.seaTemperatureDate);
+    } else {
+      this.seaTemperatureController.hide();
     }
   }
 

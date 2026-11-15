@@ -6,5 +6,15 @@ export interface FireObservation {
   latitude: number;
 }
 
-/** `seaTemperature` is only offered on the 3D globe. */
-export type VisualizationId = 'wildfires' | 'precipitation' | 'seaTemperature';
+export type VisualizationId =
+  | 'wildfires'
+  | 'precipitation'
+  | 'surfaceTemperature'
+  | 'seaTemperature'
+  | 'wind';
+
+/** A geographic position in degrees. */
+export interface GeoPoint {
+  longitude: number;
+  latitude: number;
+}

@@ -14,8 +14,18 @@ export type LonLat = readonly [longitude: number, latitude: number];
  * - `rectangle`: fit a geographic extent (recommended for the 2D map).
  *   `west` may be greater than `east` to cross the antimeridian.
  * - `point`: center on a coordinate at a given camera height in meters.
+ * - `view`: center on a coordinate and show an extent in degrees. Unlike
+ *   `rectangle`, it can show the whole world centered on any longitude
+ *   (e.g. a Pacific-centered global view).
  */
 export type CameraDestination =
+  | {
+      readonly kind: 'view';
+      readonly centerLongitude: number;
+      readonly centerLatitude: number;
+      readonly widthDegrees: number;
+      readonly heightDegrees: number;
+    }
   | {
       readonly kind: 'rectangle';
       readonly west: number;

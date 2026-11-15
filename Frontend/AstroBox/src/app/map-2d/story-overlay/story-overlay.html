@@ -78,7 +78,7 @@
     }
 
     <div class="story-progress" aria-hidden="true">
-      <span [style.width.%]="progressPercent()"></span>
+      <span [style.transform]="'scaleX(' + player.storyProgress() + ')'"></span>
     </div>
 
     <div class="story-controls" role="group" aria-label="Story playback controls">

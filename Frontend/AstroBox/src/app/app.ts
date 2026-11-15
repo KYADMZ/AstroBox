@@ -6,18 +6,33 @@ import {
   OnDestroy,
   PLATFORM_ID,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import type * as Cesium from 'cesium';
+import { BASEMAP_ATTRIBUTION, createBasemapProvider } from './basemap';
+import { GibsImageryLayerController } from './gibs/gibs-layer-controller';
 import {
+  GIBS_LAND_SURFACE_TEMPERATURE_LAYER,
   GIBS_SEA_SURFACE_TEMPERATURE_ANOMALY_LAYER,
-  createGibsWmsProvider,
   toIsoDate,
 } from './gibs/gibs-wms';
+import { LayerPanelComponent, type LayerPanelOption } from './layer-panel/layer-panel';
 import { Map2DComponent } from './map-2d/map-2d';
 import type { FireObservation, VisualizationId } from './map.models';
+import { windDateForMonth } from './wind/wind-field';
+import { WindFieldStore } from './wind/wind-field.store';
+import { WindLayerComponent } from './wind/wind-layer';
+import { WIND_SPEED_COLORS } from './wind/wind-particle-renderer';
+import { createCesiumProbeAdapter } from './zone-probe/cesium-probe-adapter';
+import { SoundscapeService } from './zone-probe/soundscape/soundscape.service';
+import { EnvironmentEffectsComponent } from './zone-probe/environment-effects/environment-effects';
+import { MascotProbeComponent } from './zone-probe/mascot-probe/mascot-probe';
+import type { MapProbeAdapter } from './zone-probe/zone-probe.models';
+import { ZoneProbeStore } from './zone-probe/zone-probe.store';
+import { ZoneStatusComponent } from './zone-probe/zone-status/zone-status';
 
 interface EonetGeometry {
   date: string;
@@ -41,13 +56,30 @@ interface MonthOption {
 interface VisualizationOption {
   id: VisualizationId;
   label: string;
-  /** Restricts the visualization to one map mode. Omitted: available in both. */
-  mapMode?: '3d' | '2d';
 }
+
+type MapMode = '3d' | '2d';
+
+const SURFACE_TEMPERATURE_SWATCH =
+  'linear-gradient(90deg, #3a1c71, #2c7fb8, #7fcdbb, #ffffbf, #f46d43, #a50026)';
+const WIND_SWATCH = `linear-gradient(90deg, ${WIND_SPEED_COLORS.map(({ color }) => color).join(', ')})`;
+const SEA_TEMPERATURE_SWATCH = 'linear-gradient(90deg, #2c5fa8, #f1f1f1, #c62f2f)';
+const PRECIPITATION_SWATCH = 'linear-gradient(90deg, #2968a8, #47c9d2, #b5f4e3)';
+const WILDFIRE_SWATCH = '#ff8555';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Map2DComponent],
+  imports: [
+    Map2DComponent,
+    LayerPanelComponent,
+    MascotProbeComponent,
+    ZoneStatusComponent,
+    EnvironmentEffectsComponent,
+    WindLayerComponent,
+  ],
+  host: {
+    '(document:keydown)': 'onKeydown($event)',
+  },
   selector: 'app-root',
   styleUrl: './app.scss',
   templateUrl: './app.html',
@@ -64,24 +96,27 @@ export class App implements AfterViewInit, OnDestroy {
   private precipitationLayer?: Cesium.ImageryLayer;
   private precipitationDate?: string;
   private precipitationRequestId = 0;
-  private seaTemperatureLayer?: Cesium.ImageryLayer;
-  private seaTemperatureLayerDate?: string;
-  private seaTemperatureRequestId = 0;
+  private seaTemperatureController?: GibsImageryLayerController;
+  private surfaceTemperatureController?: GibsImageryLayerController;
   private playInterval?: number;
   private destroyed = false;
 
   protected readonly months = this.createMonths();
-  protected readonly mapMode = signal<'3d' | '2d'>('3d');
+  protected readonly mapMode = signal<MapMode>('3d');
+  protected readonly basemapAttribution = BASEMAP_ATTRIBUTION;
+  protected readonly mapModes: { id: MapMode; label: string }[] = [
+    { id: '3d', label: '3D Globe' },
+    { id: '2d', label: '2D Map' },
+  ];
   protected readonly visualizations: VisualizationOption[] = [
     { id: 'wildfires', label: 'Wildfires' },
     { id: 'precipitation', label: 'Precipitation' },
-    { id: 'seaTemperature', label: 'Sea temperature anomaly', mapMode: '3d' },
+    { id: 'surfaceTemperature', label: 'Surface temperature' },
+    { id: 'seaTemperature', label: 'Sea temperature anomaly' },
+    { id: 'wind', label: 'Wind' },
   ];
-  protected readonly availableVisualizations = computed(() =>
-    this.visualizations.filter(
-      (visualization) => !visualization.mapMode || visualization.mapMode === this.mapMode(),
-    ),
-  );
+  /** The "Show on map" menu can be collapsed into a tab at the bottom of the map. */
+  protected readonly layerPanelMinimized = signal(false);
   protected readonly selectedMonthIndex = signal(this.months.length - 1);
   protected readonly selectedMonth = computed(
     () => this.months[this.selectedMonthIndex()],
@@ -95,19 +130,95 @@ export class App implements AfterViewInit, OnDestroy {
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly precipitationError = signal<string | null>(null);
   protected readonly seaTemperatureError = signal<string | null>(null);
+  protected readonly surfaceTemperatureError = signal<string | null>(null);
   protected readonly seaTemperatureOpacity = signal(0.7);
-  protected readonly seaTemperatureOpacityPercent = computed(() =>
-    Math.round(this.seaTemperatureOpacity() * 100),
-  );
   /** Date requested from GIBS for the selected month (see seaTemperatureDateForMonth). */
   protected readonly seaTemperatureDate = computed(() =>
     this.seaTemperatureDateForMonth(this.selectedMonth().key),
   );
   /** True while the guided El Niño story is running on the 2D map. */
   protected readonly storyActive = signal(false);
+
+  /** Verny zone probe: shared state plus the adapter of whichever map is visible. */
+  private readonly zoneProbe = inject(ZoneProbeStore);
+  private readonly probeAdapter3d = signal<MapProbeAdapter | null>(null);
+  private readonly probeAdapter2d = signal<MapProbeAdapter | null>(null);
+  protected readonly probeAdapter = computed(() =>
+    this.mapMode() === '3d' ? this.probeAdapter3d() : this.probeAdapter2d(),
+  );
+  private readonly probeContextSync = effect(() =>
+    this.zoneProbe.setContext(this.selectedMonth().key, this.selectedMonthFires()),
+  );
+
+  /** Wind field shared by the wind layer on both maps. */
+  private readonly windField = inject(WindFieldStore);
+  protected readonly windDate = computed(() => windDateForMonth(this.selectedMonth().key));
+  private readonly windFieldSync = effect(() => {
+    if (this.isVisualizationEnabled('wind')) {
+      this.windField.load(this.windDate());
+    }
+  });
+
+  /** Procedural rain, wind and fire sounds for the zone under Verny. */
+  protected readonly soundscape = inject(SoundscapeService);
+  private readonly soundscapeSync = effect(() =>
+    this.soundscape.setTargets(
+      this.storyActive()
+        ? { rain: 0, fire: 0, windSpeedMs: 0 }
+        : this.zoneProbe.effectTargets(),
+    ),
+  );
   protected readonly sliderProgress = computed(
     () => (this.selectedMonthIndex() / (this.months.length - 1)) * 100,
   );
+  protected readonly layerPanelOptions = computed<LayerPanelOption[]>(() => {
+    const enabled = this.enabledVisualizations();
+    const legends: Record<VisualizationId, { legend: string; swatch: string; error: string | null }> = {
+      wildfires: {
+        legend: 'Reported wildfire locations · NASA EONET',
+        swatch: WILDFIRE_SWATCH,
+        error: this.errorMessage(),
+      },
+      precipitation: {
+        legend: `GPM IMERG precipitation rate · ${this.selectedMonth().key}-01`,
+        swatch: PRECIPITATION_SWATCH,
+        error: this.precipitationError(),
+      },
+      surfaceTemperature: {
+        legend: `VIIRS land surface temperature (day) · ${this.seaTemperatureDate()} · land only`,
+        swatch: SURFACE_TEMPERATURE_SWATCH,
+        error: this.surfaceTemperatureError(),
+      },
+      wind: {
+        legend:
+          this.windField.status() === 'loading'
+            ? 'Loading global wind field…'
+            : `Open-Meteo ERA5 10 m wind · ${this.windDate()} 12:00 UTC · color = speed (calm → storm)`,
+        swatch: WIND_SWATCH,
+        error: this.windField.error(),
+      },
+      seaTemperature: {
+        legend: `GHRSST anomaly · ${this.seaTemperatureDate()} · blue cooler, red warmer`,
+        swatch: SEA_TEMPERATURE_SWATCH,
+        error: this.seaTemperatureError(),
+      },
+    };
+    return this.visualizations.map((visualization) => ({
+      id: visualization.id,
+      label: visualization.label,
+      active: enabled.has(visualization.id),
+      legend: legends[visualization.id].legend,
+      legendSwatch: legends[visualization.id].swatch,
+      error: legends[visualization.id].error,
+    }));
+  });
+  /** Status line shown in the bottom hint bar. */
+  protected readonly dataStatus = computed(() => {
+    if (this.isLoading()) {
+      return 'Loading NASA fire events…';
+    }
+    return this.errorMessage() ?? `${this.selectedMonth().label} ${this.selectedMonth().year}`;
+  });
 
   private readonly enabledVisualizations = signal<ReadonlySet<VisualizationId>>(
     new Set(['wildfires']),
@@ -142,10 +253,12 @@ export class App implements AfterViewInit, OnDestroy {
     return this.enabledVisualizations().has(id);
   }
 
-  protected selectMapMode(mode: '3d' | '2d'): void {
+  protected selectMapMode(mode: MapMode): void {
     if (this.mapMode() === mode) {
       return;
     }
+    this.seaTemperatureError.set(null);
+    this.surfaceTemperatureError.set(null);
 
     if (mode === '2d') {
       this.destroy3DMap();
@@ -170,16 +283,60 @@ export class App implements AfterViewInit, OnDestroy {
     this.storyActive.set(active);
   }
 
-  protected onSeaTemperatureOpacityInput(event: Event): void {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement)) {
+  protected onMap2DProbeAdapterChange(adapter: MapProbeAdapter | null): void {
+    this.probeAdapter2d.set(adapter);
+  }
+
+  protected onMap2DSurfaceTemperatureError(message: string | null): void {
+    this.surfaceTemperatureError.set(message);
+  }
+
+  protected onMap2DSeaTemperatureError(message: string | null): void {
+    this.seaTemperatureError.set(message);
+  }
+
+  protected onSeaTemperatureOpacityChange(value: number): void {
+    const opacity = Math.min(Math.max(value, 0), 1);
+    this.seaTemperatureOpacity.set(opacity);
+    this.seaTemperatureController?.setOpacity(opacity);
+  }
+
+  protected setLayerPanelMinimized(minimized: boolean): void {
+    this.layerPanelMinimized.set(minimized);
+  }
+
+  /** Keyboard shortcuts shown in the hint bar: Q/E map mode, L layers, Space timeline. */
+  protected onKeydown(event: KeyboardEvent): void {
+    const target = event.target;
+    if (
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      (target instanceof HTMLElement &&
+        (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName)))
+    ) {
       return;
     }
 
-    const opacity = Math.min(Math.max(Number(input.value), 0), 1);
-    this.seaTemperatureOpacity.set(opacity);
-    if (this.seaTemperatureLayer) {
-      this.seaTemperatureLayer.alpha = opacity;
+    switch (event.key.toLowerCase()) {
+      case 'q':
+        this.selectMapMode('3d');
+        break;
+      case 'e':
+        this.selectMapMode('2d');
+        break;
+      case 'm':
+        this.soundscape.toggle();
+        break;
+      case 'l':
+        if (!this.storyActive()) {
+          this.layerPanelMinimized.update((minimized) => !minimized);
+        }
+        break;
+      case ' ':
+        event.preventDefault();
+        this.togglePlayback();
+        break;
     }
   }
 
@@ -259,18 +416,48 @@ export class App implements AfterViewInit, OnDestroy {
         selectionIndicator: false,
         timeline: false,
       });
-      this.viewer.imageryLayers.addImageryProvider(
-        new cesium.UrlTemplateImageryProvider({
-          credit: '© OpenStreetMap contributors',
-          url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        }),
-      );
+      // English place names (Esri); OpenStreetMap tiles use local-language labels.
+      this.viewer.imageryLayers.addImageryProvider(createBasemapProvider(cesium));
       this.viewer.scene.globe.baseColor = cesium.Color.fromCssColorString('#102027');
       this.viewer.camera.setView({
         destination: cesium.Cartesian3.fromDegrees(-100, 25, 16_000_000),
       });
+      this.probeAdapter3d.set(createCesiumProbeAdapter(cesium, this.viewer));
       this.fireDataSource = new cesium.CustomDataSource('Wildfires');
       void this.viewer.dataSources.add(this.fireDataSource);
+      this.seaTemperatureController = new GibsImageryLayerController(cesium, this.viewer, {
+        layer: GIBS_SEA_SURFACE_TEMPERATURE_ANOMALY_LAYER,
+        credit: 'NASA JPL GHRSST MUR / NASA GIBS',
+        label: 'Sea temperature anomaly',
+        opacity: this.seaTemperatureOpacity(),
+        onError: (message) => {
+          if (!this.destroyed) {
+            this.seaTemperatureError.set(message);
+          }
+        },
+        // Keep precipitation readable above the ocean temperature layer.
+        afterAdd: () => {
+          if (this.precipitationLayer && this.viewer && !this.viewer.isDestroyed()) {
+            this.viewer.imageryLayers.raiseToTop(this.precipitationLayer);
+          }
+        },
+      });
+      this.surfaceTemperatureController = new GibsImageryLayerController(cesium, this.viewer, {
+        layer: GIBS_LAND_SURFACE_TEMPERATURE_LAYER,
+        credit: 'NASA VIIRS NOAA-20 LST / NASA GIBS',
+        label: 'Surface temperature',
+        opacity: 0.75,
+        onError: (message) => {
+          if (!this.destroyed) {
+            this.surfaceTemperatureError.set(message);
+          }
+        },
+        afterAdd: () => {
+          if (this.precipitationLayer && this.viewer && !this.viewer.isDestroyed()) {
+            this.viewer.imageryLayers.raiseToTop(this.precipitationLayer);
+          }
+        },
+      });
       this.syncVisualizationLayers();
       this.updateSelectedMonthLayers();
     } catch (error) {
@@ -406,6 +593,9 @@ export class App implements AfterViewInit, OnDestroy {
     if (this.isVisualizationEnabled('seaTemperature')) {
       this.loadSeaTemperature(this.seaTemperatureDate());
     }
+    if (this.isVisualizationEnabled('surfaceTemperature')) {
+      this.surfaceTemperatureController?.show(this.seaTemperatureDate());
+    }
   }
 
   private syncVisualizationLayers(): void {
@@ -425,6 +615,11 @@ export class App implements AfterViewInit, OnDestroy {
       this.loadSeaTemperature(this.seaTemperatureDate());
     } else {
       this.removeSeaTemperatureLayer();
+    }
+    if (this.isVisualizationEnabled('surfaceTemperature')) {
+      this.surfaceTemperatureController?.show(this.seaTemperatureDate());
+    } else {
+      this.surfaceTemperatureController?.hide();
     }
   }
 
@@ -504,60 +699,19 @@ export class App implements AfterViewInit, OnDestroy {
   }
 
   private loadSeaTemperature(date: string): void {
-    if (!this.viewer || !this.cesium || this.viewer.isDestroyed()) {
-      return;
-    }
-    if (this.seaTemperatureLayer && this.seaTemperatureLayerDate === date) {
-      return;
-    }
-
-    this.removeSeaTemperatureLayer();
-    const requestId = this.seaTemperatureRequestId;
-    this.seaTemperatureError.set(null);
-
-    try {
-      const provider = createGibsWmsProvider(this.cesium, {
-        layer: GIBS_SEA_SURFACE_TEMPERATURE_ANOMALY_LAYER,
-        time: date,
-        credit: 'NASA JPL GHRSST MUR / NASA GIBS',
-      });
-
-      provider.errorEvent.addEventListener((error) => {
-        if (requestId !== this.seaTemperatureRequestId || this.destroyed) {
-          return;
-        }
-        console.error('Unable to load NASA GHRSST sea surface temperature anomalies.', error);
-        this.seaTemperatureError.set(
-          `Sea temperature anomaly imagery is unavailable for ${date}.`,
-        );
-      });
-
-      this.seaTemperatureLayer = this.viewer.imageryLayers.addImageryProvider(provider);
-      this.seaTemperatureLayer.alpha = this.seaTemperatureOpacity();
-      this.seaTemperatureLayerDate = date;
-      // Keep precipitation readable above the ocean temperature layer.
-      if (this.precipitationLayer) {
-        this.viewer.imageryLayers.raiseToTop(this.precipitationLayer);
-      }
-    } catch (error) {
-      console.error('Unable to create the sea surface temperature anomaly layer.', error);
-      this.seaTemperatureLayerDate = undefined;
-      this.seaTemperatureError.set('Sea temperature anomaly imagery could not be loaded.');
-    }
+    this.seaTemperatureController?.show(date);
   }
 
   private removeSeaTemperatureLayer(): void {
-    this.seaTemperatureRequestId += 1;
-    if (this.seaTemperatureLayer && this.viewer && !this.viewer.isDestroyed()) {
-      this.viewer.imageryLayers.remove(this.seaTemperatureLayer, true);
-    }
-    this.seaTemperatureLayer = undefined;
-    this.seaTemperatureLayerDate = undefined;
-    this.seaTemperatureError.set(null);
+    this.seaTemperatureController?.hide();
   }
 
   private destroy3DMap(): void {
+    this.probeAdapter3d.set(null);
     this.removeSeaTemperatureLayer();
+    this.seaTemperatureController = undefined;
+    this.surfaceTemperatureController?.hide();
+    this.surfaceTemperatureController = undefined;
     this.removePrecipitationLayer();
     this.viewer?.destroy();
     this.viewer = undefined;

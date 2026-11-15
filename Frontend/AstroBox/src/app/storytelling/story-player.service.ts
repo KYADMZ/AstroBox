@@ -14,6 +14,12 @@ import type {
 
 /** Frames longer than this (e.g. a background tab) do not advance the story further. */
 const MAX_FRAME_DELTA_MS = 250;
+/**
+ * UI signals (progress bars, narration panel) are refreshed at ~12 Hz instead
+ * of every frame, so Angular change detection never competes with the map's
+ * camera animation. The map itself still receives the exact time every frame.
+ */
+const UI_PUBLISH_INTERVAL_MS = 80;
 
 /**
  * Map-agnostic playback controller for guided stories.
@@ -38,6 +44,9 @@ export class StoryPlayerService implements OnDestroy {
   private stage?: StoryStage;
   private frameHandle?: number;
   private lastFrameTime?: number;
+  /** Exact scene time, updated every frame (the signal is throttled). */
+  private sceneElapsedPrecise = 0;
+  private lastPublishedAt = 0;
 
   /** All lifecycle events. Intended for the future mascot and audio systems. */
   readonly events$: Observable<StoryLifecycleEvent> = this.eventsSubject.asObservable();
@@ -82,6 +91,11 @@ export class StoryPlayerService implements OnDestroy {
     const scene = this.currentScene();
     return scene ? Math.min(this.sceneElapsedState() / scene.durationMs, 1) : 0;
   });
+
+  /** Exact elapsed time of the current scene, for frame-accurate audio/mascot sync. */
+  preciseSceneElapsedMs(): number {
+    return this.sceneElapsedPrecise;
+  }
 
   /** Convenience helper to listen to one event type. */
   on<T extends StoryLifecycleEventType>(
@@ -138,7 +152,8 @@ export class StoryPlayerService implements OnDestroy {
     this.safely(() => this.stage?.pause());
     const sceneEvent = this.sceneEvent();
     if (sceneEvent) {
-      this.emit({ type: 'storyPaused', ...sceneEvent, sceneElapsedMs: this.sceneElapsedState() });
+      this.publishElapsed();
+      this.emit({ type: 'storyPaused', ...sceneEvent, sceneElapsedMs: this.sceneElapsedPrecise });
     }
   }
 
@@ -150,7 +165,7 @@ export class StoryPlayerService implements OnDestroy {
     this.statusState.set('playing');
     const sceneEvent = this.sceneEvent();
     if (sceneEvent) {
-      this.emit({ type: 'storyResumed', ...sceneEvent, sceneElapsedMs: this.sceneElapsedState() });
+      this.emit({ type: 'storyResumed', ...sceneEvent, sceneElapsedMs: this.sceneElapsedPrecise });
     }
     this.scheduleFrame();
   }
@@ -221,10 +236,11 @@ export class StoryPlayerService implements OnDestroy {
         ? 0
         : Math.min(Math.max(now - this.lastFrameTime, 0), MAX_FRAME_DELTA_MS);
     this.lastFrameTime = now;
-    const elapsed = this.sceneElapsedState() + delta;
+    const elapsed = this.sceneElapsedPrecise + delta;
 
     if (elapsed >= scene.durationMs) {
-      this.sceneElapsedState.set(scene.durationMs);
+      this.sceneElapsedPrecise = scene.durationMs;
+      this.publishElapsed();
       const story = this.storyState();
       const nextIndex = this.sceneIndexState() + 1;
       if (!story || nextIndex >= story.scenes.length) {
@@ -234,8 +250,12 @@ export class StoryPlayerService implements OnDestroy {
       this.exitCurrentScene('completed');
       this.enterScene(nextIndex);
     } else {
-      this.sceneElapsedState.set(elapsed);
+      this.sceneElapsedPrecise = elapsed;
       this.safely(() => this.stage?.update(scene, elapsed));
+      if (now - this.lastPublishedAt >= UI_PUBLISH_INTERVAL_MS) {
+        this.lastPublishedAt = now;
+        this.publishElapsed();
+      }
     }
 
     this.scheduleFrame();
@@ -249,6 +269,7 @@ export class StoryPlayerService implements OnDestroy {
     }
 
     this.sceneIndexState.set(index);
+    this.sceneElapsedPrecise = 0;
     this.sceneElapsedState.set(0);
     this.safely(() => this.stage?.enterScene(scene, index));
     this.safely(() => scene.onEnter?.(this.sceneContext(story, scene, index)));
@@ -277,6 +298,7 @@ export class StoryPlayerService implements OnDestroy {
     this.safely(() => this.stage?.end());
     this.statusState.set('completed');
     this.sceneIndexState.set(-1);
+    this.sceneElapsedPrecise = 0;
     this.sceneElapsedState.set(0);
     this.layerErrorState.set(null);
     this.emit({ type: 'storyCompleted', ...event });
@@ -286,6 +308,7 @@ export class StoryPlayerService implements OnDestroy {
     this.cancelFrame();
     this.statusState.set('idle');
     this.sceneIndexState.set(-1);
+    this.sceneElapsedPrecise = 0;
     this.sceneElapsedState.set(0);
     this.layerErrorState.set(null);
   }
@@ -310,7 +333,7 @@ export class StoryPlayerService implements OnDestroy {
     return {
       storyId: this.storyState()?.id ?? '',
       timestamp: performance.now(),
-      storyElapsedMs: this.storyElapsedMs(),
+      storyElapsedMs: this.preciseStoryElapsedMs(),
     };
   }
 
@@ -321,6 +344,22 @@ export class StoryPlayerService implements OnDestroy {
     return scene
       ? { ...this.baseEvent(), sceneIndex: this.sceneIndexState(), scene }
       : undefined;
+  }
+
+  private preciseStoryElapsedMs(): number {
+    const story = this.storyState();
+    const index = this.sceneIndexState();
+    if (!story || index < 0) {
+      return 0;
+    }
+    const previous = story.scenes
+      .slice(0, index)
+      .reduce((sum, scene) => sum + scene.durationMs, 0);
+    return previous + this.sceneElapsedPrecise;
+  }
+
+  private publishElapsed(): void {
+    this.sceneElapsedState.set(this.sceneElapsedPrecise);
   }
 
   private emit(event: StoryLifecycleEvent): void {

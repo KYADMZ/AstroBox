@@ -1,39 +1,62 @@
-<main class="dashboard">
+<main class="shell">
   <header class="topbar">
     <a class="brand" href="/" aria-label="AstroBox home">
-      <span class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none">
-          <path d="M13.2 2.8c.4 3.2-.8 4.7-2.5 6.3-1.6 1.5-2.8 3-2.8 5.5a6.1 6.1 0 0 0 12.2 0c0-3.7-2.4-7.9-6.9-11.8Z" />
-          <path d="M11.5 12.4c.2 1.5-.6 2.3-1.2 3.1a3.1 3.1 0 0 0 5.7 1.7c.5-1.6-.4-3.3-2.7-5.8-.1 1.4-.8 1.8-1.8 1Z" />
-        </svg>
-      </span>
+      <img class="brand-mascot" src="astro-mascot.png" alt="" width="160" height="158" />
       <span class="brand-copy">
         <strong>ASTRO<span>BOX</span></strong>
-        <small>A rich visualization experience</small>
+        <small>Earth observation frontier</small>
       </span>
     </a>
 
-    <div class="topbar-meta">
-      <span class="data-source"><span class="status-dot"></span> NASA EONET DATA</span>
-      <span class="topbar-divider"></span>
-      <nav class="view-navigation" aria-label="Map view">
+    <nav class="mode-tabs" aria-label="Map view">
+      <kbd aria-hidden="true">Q</kbd>
+      @for (mode of mapModes; track mode.id) {
         <button
           type="button"
-          [class.active]="mapMode() === '3d'"
-          [attr.aria-pressed]="mapMode() === '3d'"
-          (click)="selectMapMode('3d')"
-        >3D map</button>
-        <button
-          type="button"
-          [class.active]="mapMode() === '2d'"
-          [attr.aria-pressed]="mapMode() === '2d'"
-          (click)="selectMapMode('2d')"
-        >2D map</button>
-      </nav>
+          class="mode-tab"
+          [class.active]="mapMode() === mode.id"
+          [attr.aria-pressed]="mapMode() === mode.id"
+          [attr.aria-keyshortcuts]="mode.id === '3d' ? 'Q' : 'E'"
+          (click)="selectMapMode(mode.id)"
+        >
+          <span>{{ mode.label }}</span>
+        </button>
+      }
+      <kbd aria-hidden="true">E</kbd>
+    </nav>
+
+    <div class="topbar-tools">
+    <button
+      type="button"
+      class="sound-toggle"
+      [class.is-on]="soundscape.enabled()"
+      [attr.aria-pressed]="soundscape.enabled()"
+      aria-keyshortcuts="M"
+      [attr.aria-label]="soundscape.enabled() ? 'Mute zone sounds' : 'Turn on zone sounds'"
+      (click)="soundscape.toggle()"
+    >
+      @if (soundscape.enabled()) {
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></svg>
+      } @else {
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM16 9.5l5 5M21 9.5l-5 5" /></svg>
+      }
+    </button>
+    <div class="readout" aria-live="polite">
+      <span class="readout-row">
+        <span>Selected month</span>
+        <strong>{{ selectedMonth().label }} {{ selectedMonth().year }}</strong>
+      </span>
+      <span class="readout-row">
+        <span>Data feed</span>
+        <strong class="feed">
+          <span class="status-dot" [class.is-error]="errorMessage()"></span>NASA EONET · GIBS
+        </strong>
+      </span>
+    </div>
     </div>
   </header>
 
-  <section class="map-stage" aria-label="Global wildfire and precipitation map">
+  <section class="map-stage" aria-label="Global wildfire, precipitation and sea temperature map">
     @if (mapMode() === '3d') {
       <div #mapContainer class="cesium-map" aria-label="Interactive 3D globe with map visualizations"></div>
     } @else {
@@ -43,169 +66,109 @@
         [monthKey]="selectedMonth().key"
         [wildfiresEnabled]="isVisualizationEnabled('wildfires')"
         [precipitationEnabled]="isVisualizationEnabled('precipitation')"
+        [seaTemperatureEnabled]="isVisualizationEnabled('seaTemperature')"
+        [seaTemperatureDate]="seaTemperatureDate()"
+        [seaTemperatureOpacity]="seaTemperatureOpacity()"
+        [surfaceTemperatureEnabled]="isVisualizationEnabled('surfaceTemperature')"
+        [surfaceTemperatureDate]="seaTemperatureDate()"
+        (surfaceTemperatureErrorChange)="onMap2DSurfaceTemperatureError($event)"
         (mapErrorChange)="onMap2DError($event)"
         (precipitationErrorChange)="onMap2DPrecipitationError($event)"
+        (seaTemperatureErrorChange)="onMap2DSeaTemperatureError($event)"
         (storyActiveChange)="onMap2DStoryActiveChange($event)"
+        (probeAdapterChange)="onMap2DProbeAdapterChange($event)"
       />
     }
+    <!-- Animated wind particles over either map. -->
+    <app-wind-layer
+      [adapter]="probeAdapter()"
+      [active]="isVisualizationEnabled('wind') && !storyActive()"
+    />
+    <div class="hex-overlay" aria-hidden="true"></div>
     <div class="map-vignette" aria-hidden="true"></div>
+    <span class="frame-corner top-left" aria-hidden="true"></span>
+    <span class="frame-corner top-right" aria-hidden="true"></span>
+    <span class="frame-corner bottom-left" aria-hidden="true"></span>
+    <span class="frame-corner bottom-right" aria-hidden="true"></span>
 
-    <!-- Hidden during the 2D guided story so the narration stays the focus. -->
+    <!-- Weather effects for the zone under Verny (rain, drops on the screen, flames). -->
+    <app-environment-effects [suspended]="storyActive()" />
+
+    <!-- Right column. Hidden during the 2D guided story: the story controls the map. -->
     @if (!storyActive()) {
-      <div class="map-legend" aria-label="Map legend">
-        @if (isVisualizationEnabled('wildfires')) {
-          <span class="legend-item">
-            <span class="legend-marker" aria-hidden="true"></span>
-            <span>Reported wildfire</span>
-          </span>
-        }
-        @if (isVisualizationEnabled('precipitation')) {
-          <span class="legend-item">
-            <span class="precipitation-legend" aria-hidden="true"></span>
-            <span>GPM precipitation rate · {{ selectedMonth().key }}-01</span>
-          </span>
-        }
-        @if (mapMode() === '3d' && isVisualizationEnabled('seaTemperature')) {
-          <span class="legend-item">
-            <span class="sst-legend" aria-hidden="true"></span>
-            <span>Sea temperature anomaly · {{ seaTemperatureDate() }} · blue cooler, red warmer</span>
-          </span>
-        }
+      <div class="right-rail">
+        <app-layer-panel
+          [options]="layerPanelOptions()"
+          [minimized]="layerPanelMinimized()"
+          [seaTemperatureOpacity]="seaTemperatureOpacity()"
+          (toggleLayer)="toggleVisualization($event)"
+          (minimizedChange)="setLayerPanelMinimized($event)"
+          (seaTemperatureOpacityChange)="onSeaTemperatureOpacityChange($event)"
+        />
+        <app-zone-status />
       </div>
-
-      <aside class="activity-card" aria-live="polite">
-        <div class="activity-card-top">
-          <span class="eyebrow">SELECTED MONTH</span>
-          <span class="activity-indicator"></span>
-        </div>
-        <strong class="activity-month">{{ selectedMonth().label }}</strong>
-        <div class="activity-count">
-          <span>{{ selectedMonthFires().length }}</span>
-          <span class="count-caption">reported<br />fire locations</span>
-        </div>
-        <div class="activity-rule"></div>
-        @if (isLoading()) {
-          <p class="activity-status">Loading NASA fire events…</p>
-        } @else if (errorMessage()) {
-          <p class="activity-status error-text">{{ errorMessage() }}</p>
-        } @else if (selectedMonthFires().length === 0) {
-          <p class="activity-status">No wildfire events reported for this month.</p>
-        } @else {
-          <p class="activity-status">Events reported by NASA EONET</p>
-        }
-      </aside>
     }
 
-    <div class="map-attribution">Map tiles © OpenStreetMap contributors</div>
+    <!-- Verny: drag onto the map to scan a zone. -->
+    <app-mascot-probe [adapter]="probeAdapter()" [suspended]="storyActive()" />
+
+    <div class="map-attribution">{{ basemapAttribution }}</div>
   </section>
 
-  <section class="timeline-panel" aria-label="Visualization and timeline controls">
-    <div class="timeline-header">
+  <section class="timeline" aria-label="Timeline controls">
+    <div class="timeline-row">
+      <button
+        class="play-button"
+        type="button"
+        aria-keyshortcuts="Space"
+        (click)="togglePlayback()"
+        [attr.aria-label]="isPlaying() ? 'Pause timeline animation' : 'Play timeline animation'"
+      >
+        @if (isPlaying()) {
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5v10M13 5v10" /></svg>
+        } @else {
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6V4Z" /></svg>
+        }
+      </button>
+
       <div class="timeline-title">
-        <span class="timeline-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none">
-            <path d="M4 19V5m0 14h16M8 15l3-4 3 2 5-7" />
-            <circle cx="19" cy="6" r="1.5" />
-          </svg>
-        </span>
-        <div>
-          <h2>Six-month timeline</h2>
-          <p>Explore reported wildfire activity by month</p>
+        <span class="kicker">SIX-MONTH TIMELINE</span>
+        <strong>{{ months[0].shortLabel }} — {{ months[months.length - 1].shortLabel }} {{ months[months.length - 1].year }}</strong>
+      </div>
+
+      <div class="slider-wrap">
+        <input
+          class="month-slider"
+          type="range"
+          min="0"
+          [max]="months.length - 1"
+          step="1"
+          [value]="selectedMonthIndex()"
+          [style.--slider-progress]="sliderProgress() + '%'"
+          [attr.aria-label]="'Select month: ' + selectedMonth().label"
+          [attr.aria-valuetext]="selectedMonth().label"
+          (input)="onMonthInput($event)"
+        />
+        <div class="month-labels" aria-hidden="true">
+          @for (month of months; track month.key; let i = $index) {
+            <span [class.selected]="i === selectedMonthIndex()">{{ month.shortLabel }}</span>
+          }
         </div>
       </div>
-      <div class="timeline-controls">
-        <span class="timeline-period">{{ months[0].label }} — {{ months[months.length - 1].label }}</span>
-        <button
-          class="play-button"
-          type="button"
-          (click)="togglePlayback()"
-          [attr.aria-label]="isPlaying() ? 'Pause timeline animation' : 'Play timeline animation'"
-        >
-          @if (isPlaying()) {
-            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path d="M7 5v10M13 5v10" />
-            </svg>
-            <span>Pause</span>
-          } @else {
-            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path d="m7 4 9 6-9 6V4Z" />
-            </svg>
-            <span>Play timeline</span>
-          }
-        </button>
-      </div>
     </div>
 
-    <div class="visualization-row">
-      <div class="visualization-controls" role="group" aria-label="Map visualizations">
-        <span class="visualization-label">SHOW ON MAP</span>
-        @for (visualization of availableVisualizations(); track visualization.id) {
-          <button
-            class="visualization-toggle"
-            [class.is-active]="isVisualizationEnabled(visualization.id)"
-            [attr.aria-pressed]="isVisualizationEnabled(visualization.id)"
-            type="button"
-            (click)="toggleVisualization(visualization.id)"
-          >
-            <span
-              class="toggle-dot"
-              [class.wildfires]="visualization.id === 'wildfires'"
-              [class.precipitation]="visualization.id === 'precipitation'"
-              [class.sea-temperature]="visualization.id === 'seaTemperature'"
-              aria-hidden="true"
-            ></span>
-            <span>{{ visualization.label }}</span>
-          </button>
+    <footer class="hint-bar">
+      <span class="hint-status" [class.is-error]="errorMessage()">{{ dataStatus() }}</span>
+      <span class="hints">
+        <span><kbd>Space</kbd> Play timeline</span>
+        <span><kbd>Q</kbd><kbd>E</kbd> Switch map</span>
+        <span><kbd>L</kbd> Layer menu</span>
+        <span><kbd>M</kbd> Sound {{ soundscape.enabled() ? 'on' : 'off' }}</span>
+        @if (mapMode() === '2d') {
+          <span><kbd>Esc</kbd> Exit story</span>
         }
-        @if (mapMode() === '3d' && isVisualizationEnabled('seaTemperature')) {
-          <label class="opacity-control">
-            <span>Opacity {{ seaTemperatureOpacityPercent() }}%</span>
-            <input
-              type="range"
-              min="0.1"
-              max="1"
-              step="0.05"
-              [value]="seaTemperatureOpacity()"
-              aria-label="Sea temperature anomaly layer opacity"
-              (input)="onSeaTemperatureOpacityInput($event)"
-            />
-          </label>
-        }
-      </div>
-      @if (precipitationError()) {
-        <span class="layer-error" role="status">{{ precipitationError() }}</span>
-      }
-      @if (mapMode() === '3d' && seaTemperatureError()) {
-        <span class="layer-error" role="status">{{ seaTemperatureError() }}</span>
-      }
-    </div>
-
-    <div class="slider-wrap">
-      <input
-        class="month-slider"
-        type="range"
-        min="0"
-        [max]="months.length - 1"
-        step="1"
-        [value]="selectedMonthIndex()"
-        [style.--slider-progress]="sliderProgress() + '%'"
-        [attr.aria-label]="'Select month: ' + selectedMonth().label"
-        [attr.aria-valuetext]="selectedMonth().label"
-        (input)="onMonthInput($event)"
-      />
-      <div class="month-labels" aria-hidden="true">
-        @for (month of months; track month.key; let i = $index) {
-          <span [class.selected]="i === selectedMonthIndex()">{{ month.shortLabel }}</span>
-        }
-      </div>
-    </div>
-
-    <div class="timeline-footer">
-      <div class="timeline-note">
-        <span class="note-dot"></span>
-        <span>Layers can be combined or turned off</span>
-      </div>
-      <span class="data-credit">WILDFIRES: NASA EONET · PRECIPITATION: NASA GPM IMERG / GIBS · SEA TEMPERATURE: GHRSST MUR / GIBS</span>
-    </div>
+      </span>
+      <span class="data-credit">EONET · GPM IMERG · GHRSST · VIIRS / NASA GIBS · POWER · Weather data by Open-Meteo.com</span>
+    </footer>
   </section>
 </main>

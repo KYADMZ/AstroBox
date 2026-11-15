@@ -1,0 +1,336 @@
+:host {
+  /* Lives in the app's right column; the minimized tab is placed against it. */
+  display: contents;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--astro-teal-bright);
+    outline-offset: 2px;
+  }
+}
+
+svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+/* ---------------------------------------------------------------- panel */
+
+.layer-panel {
+  position: relative;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.9rem 0.9rem 1rem;
+  border: 1px solid var(--astro-panel-border);
+  background:
+    linear-gradient(180deg, rgba(72, 144, 170, 0.12), transparent 4rem),
+    var(--astro-panel);
+  backdrop-filter: blur(12px);
+  clip-path: var(--astro-frame);
+  pointer-events: auto;
+  animation: panel-in 220ms ease-out;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--astro-panel-border-soft);
+
+  > div {
+    flex: 1;
+  }
+
+  h2 {
+    margin: 0.1rem 0 0;
+    color: var(--astro-cream);
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+}
+
+.kicker {
+  color: var(--astro-teal-bright);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+.panel-mark {
+  width: 1.5rem;
+  height: 1.7rem;
+  background: linear-gradient(160deg, var(--astro-teal-bright), var(--astro-teal));
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  box-shadow: var(--astro-glow);
+}
+
+.minimize {
+  display: grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--astro-panel-border-soft);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--astro-text-muted);
+
+  &:hover {
+    border-color: var(--astro-panel-border);
+    color: var(--astro-cream);
+  }
+
+  svg {
+    width: 1rem;
+  }
+}
+
+.layer-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.45rem;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.45rem;
+    min-width: 0;
+    padding: 0.35rem;
+    border: 1px solid transparent;
+    transition: border-color 150ms ease, background 150ms ease;
+
+    &.is-active {
+      border-color: var(--astro-panel-border-soft);
+      background: rgba(72, 144, 170, 0.08);
+    }
+  }
+}
+
+.layer-option {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--astro-text-muted);
+  text-align: left;
+
+  &:hover {
+    color: var(--astro-text);
+  }
+}
+
+.is-active .layer-option {
+  color: var(--astro-cream);
+}
+
+/* Hexagonal layer icon */
+.hex {
+  --hex-color: var(--astro-teal-bright);
+  position: relative;
+  display: grid;
+  flex: none;
+  width: 2.3rem;
+  height: 2.6rem;
+  place-items: center;
+  background: color-mix(in srgb, var(--hex-color) 40%, transparent);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  color: var(--hex-color);
+
+  &::before {
+    position: absolute;
+    inset: 1.5px;
+    background: var(--astro-panel-solid);
+    clip-path: inherit;
+    content: "";
+  }
+
+  svg {
+    position: relative;
+    width: 1.15rem;
+  }
+
+  &[data-layer="wildfires"] {
+    --hex-color: var(--astro-fire);
+  }
+
+  &[data-layer="precipitation"] {
+    --hex-color: #52c9d2;
+  }
+
+  &[data-layer="wind"] {
+    --hex-color: #c6f07a;
+  }
+
+  &[data-layer="surfaceTemperature"] {
+    --hex-color: #f2b84b;
+  }
+
+  &[data-layer="seaTemperature"] {
+    --hex-color: #e86a5a;
+  }
+}
+
+.is-active .hex {
+  background: var(--hex-color);
+  filter: drop-shadow(0 0 0.35rem var(--hex-color));
+
+  &::before {
+    background: color-mix(in srgb, var(--hex-color) 22%, var(--astro-panel-solid));
+  }
+}
+
+.layer-name {
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.check {
+  display: grid;
+  width: 1.3rem;
+  height: 1.3rem;
+  place-items: center;
+  border: 1px solid var(--astro-panel-border-soft);
+  color: transparent;
+
+  svg {
+    width: 0.9rem;
+    stroke-width: 2.4;
+  }
+}
+
+.is-active .check {
+  border-color: var(--astro-teal-bright);
+  background: rgba(108, 211, 224, 0.18);
+  color: var(--astro-cream);
+  box-shadow: var(--astro-glow);
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding-left: 3rem;
+  color: var(--astro-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.swatch {
+  flex: none;
+  width: 1.6rem;
+  height: 0.45rem;
+  border-radius: 1rem;
+}
+
+.opacity {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding-left: 3rem;
+  color: var(--astro-text-muted);
+  font-size: 0.72rem;
+
+  input {
+    flex: 1;
+    min-width: 0;
+    accent-color: var(--astro-teal-bright);
+  }
+
+  .value {
+    width: 2.4rem;
+    color: var(--astro-cream);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.layer-error {
+  margin: 0;
+  padding-left: 3rem;
+  color: #ffad8b;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+/* ------------------------------------------------------------- minimized */
+
+.layer-tab {
+  position: absolute;
+  right: 3.2rem;
+  bottom: 0;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 1rem 0.5rem;
+  border: 1px solid var(--astro-panel-border);
+  border-bottom: 0;
+  background: var(--astro-panel);
+  backdrop-filter: blur(10px);
+  clip-path: polygon(0.6rem 0, calc(100% - 0.6rem) 0, 100% 100%, 0 100%);
+  color: var(--astro-cream);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  pointer-events: auto;
+  animation: tab-in 200ms ease-out;
+
+  &:hover {
+    background: rgba(40, 56, 80, 0.92);
+  }
+
+  .chevron {
+    width: 0.9rem;
+    color: var(--astro-teal-bright);
+  }
+}
+
+.tab-count {
+  display: grid;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  place-items: center;
+  background: var(--astro-teal);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  color: var(--astro-cream);
+  font-size: 0.65rem;
+  letter-spacing: 0;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(1rem);
+  }
+}
+
+@keyframes tab-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layer-panel,
+  .layer-tab {
+    animation: none;
+  }
+}

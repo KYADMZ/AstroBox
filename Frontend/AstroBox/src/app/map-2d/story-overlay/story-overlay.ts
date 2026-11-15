@@ -3,6 +3,9 @@ import { EL_NINO_STORY } from '../../storytelling/el-nino-story';
 import { StoryPlayerService } from '../../storytelling/story-player.service';
 import type { StoryLayerDefinition, StoryLayerId } from '../../storytelling/story.models';
 
+/** Neon cyan: default accent for the ocean-focused story. */
+const DEFAULT_ACCENT = '#3ef0ff';
+
 interface SceneIndicator {
   id: string;
   title: string;
@@ -21,6 +24,7 @@ interface SceneIndicator {
   templateUrl: './story-overlay.html',
   host: {
     '(document:keydown.escape)': 'onEscape()',
+    '[style.--story-accent]': 'accentColor()',
   },
 })
 export class StoryOverlayComponent {
@@ -36,7 +40,6 @@ export class StoryOverlayComponent {
   protected readonly elapsedLabel = computed(() =>
     formatDuration(this.player.storyElapsedMs()),
   );
-  protected readonly progressPercent = computed(() => this.player.storyProgress() * 100);
 
   protected readonly sceneIndicators = computed<SceneIndicator[]>(() => {
     const currentIndex = this.player.sceneIndex();
@@ -47,6 +50,43 @@ export class StoryOverlayComponent {
       state: index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming',
       progress: index < currentIndex ? 1 : index === currentIndex ? sceneProgress : 0,
     }));
+  });
+
+  /**
+   * Accent color of the narration panel: the color of the newest highlighted
+   * shape on the map (zones first, then arrows). Water and wetter areas are
+   * neon cyan; warm water and drier areas are neon orange.
+   */
+  protected readonly accentColor = computed(() => {
+    const scene = this.scene();
+    const elapsed = this.player.sceneElapsedMs();
+    if (!scene) {
+      return DEFAULT_ACCENT;
+    }
+
+    let accent = DEFAULT_ACCENT;
+    let bestRank = 0;
+    let bestAppearAt = -1;
+    for (const element of scene.visualElements) {
+      const appearAt = element.appearAtMs ?? 0;
+      const visible =
+        elapsed >= appearAt && elapsed < (element.disappearAtMs ?? Number.POSITIVE_INFINITY);
+      const rank =
+        element.type === 'zone' || element.type === 'highlightArea'
+          ? 2
+          : element.type === 'arrow'
+            ? 1
+            : 0;
+      if (!visible || rank === 0 || element.color.startsWith('rgba')) {
+        continue;
+      }
+      if (rank > bestRank || (rank === bestRank && appearAt >= bestAppearAt)) {
+        bestRank = rank;
+        bestAppearAt = appearAt;
+        accent = element.color;
+      }
+    }
+    return accent;
   });
 
   /** Observed NASA layers visible in the current scene. */

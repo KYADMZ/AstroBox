@@ -1,0 +1,96 @@
+@if (minimized) {
+  <button
+    class="layer-tab"
+    type="button"
+    aria-label="Show layer menu"
+    aria-keyshortcuts="L"
+    (click)="setMinimized(false)"
+  >
+    <svg class="chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 12 5-5 5 5" /></svg>
+    <span>Layers</span>
+    <span class="tab-count">{{ activeCount }}</span>
+  </button>
+} @else {
+  <section class="layer-panel" aria-label="Show on map">
+    <header class="panel-header">
+      <span class="panel-mark" aria-hidden="true"></span>
+      <div>
+        <span class="kicker">FRONTIER LAYERS</span>
+        <h2>Show on map</h2>
+      </div>
+      <button
+        class="minimize"
+        type="button"
+        aria-label="Minimize layer menu"
+        aria-keyshortcuts="L"
+        (click)="setMinimized(true)"
+      >
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 8 5 5 5-5" /></svg>
+      </button>
+    </header>
+
+    <ul class="layer-list">
+      @for (option of options; track option.id) {
+        <li [class.is-active]="option.active">
+          <button
+            class="layer-option"
+            type="button"
+            [attr.aria-pressed]="option.active"
+            (click)="toggleLayer.emit(option.id)"
+          >
+            <span class="hex" [attr.data-layer]="option.id" aria-hidden="true">
+              @switch (option.id) {
+                @case ('wildfires') {
+                  <svg viewBox="0 0 24 24"><path d="M12.6 3c.4 3-.8 4.4-2.3 5.9-1.5 1.4-2.6 2.8-2.6 5.1a5.3 5.3 0 0 0 10.6 0c0-3.4-2.2-7.3-5.7-11Z" /></svg>
+                }
+                @case ('precipitation') {
+                  <svg viewBox="0 0 24 24"><path d="M12 3.5s-5.5 6.2-5.5 10a5.5 5.5 0 0 0 11 0c0-3.8-5.5-10-5.5-10Z" /></svg>
+                }
+                @case ('wind') {
+                  <svg viewBox="0 0 24 24"><path d="M3 9h11a3 3 0 1 0-3-3M3 13h15a3 3 0 1 1-3 3M3 17h7" /></svg>
+                }
+                @case ('surfaceTemperature') {
+                  <svg viewBox="0 0 24 24"><path d="M10 13.5V5a2 2 0 0 1 4 0v8.5a4 4 0 1 1-4 0ZM12 9v7" /></svg>
+                }
+                @default {
+                  <svg viewBox="0 0 24 24"><path d="M3 9c2.2 0 2.2-1.6 4.5-1.6S9.8 9 12 9s2.3-1.6 4.5-1.6S18.8 9 21 9M3 14c2.2 0 2.2-1.6 4.5-1.6S9.8 14 12 14s2.3-1.6 4.5-1.6S18.8 14 21 14M3 19c2.2 0 2.2-1.6 4.5-1.6S9.8 19 12 19s2.3-1.6 4.5-1.6S18.8 19 21 19" /></svg>
+                }
+              }
+            </span>
+            <span class="layer-name">{{ option.label }}</span>
+            <span class="check" aria-hidden="true">
+              <svg viewBox="0 0 20 20"><path d="m4.5 10.5 3.5 3.5 7.5-8" /></svg>
+            </span>
+          </button>
+
+          @if (option.active && option.legend) {
+            <div class="legend">
+              <span class="swatch" [style.background]="option.legendSwatch" aria-hidden="true"></span>
+              <span>{{ option.legend }}</span>
+            </div>
+          }
+
+          @if (option.active && option.id === 'seaTemperature') {
+            <label class="opacity">
+              <span>Opacity</span>
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.05"
+                [value]="seaTemperatureOpacity"
+                aria-label="Sea temperature anomaly layer opacity"
+                (input)="onOpacityInput($event)"
+              />
+              <span class="value">{{ opacityPercent }}%</span>
+            </label>
+          }
+
+          @if (option.error) {
+            <p class="layer-error" role="status">{{ option.error }}</p>
+          }
+        </li>
+      }
+    </ul>
+  </section>
+}

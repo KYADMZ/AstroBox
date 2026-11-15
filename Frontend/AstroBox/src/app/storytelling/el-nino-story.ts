@@ -29,23 +29,30 @@ import type {
 
 const TOP_DOWN: CameraOrientation = { heading: 0, pitch: -90, roll: 0 };
 
+/** Whole world, centered on the Pacific so the story's ocean stays in the middle. */
 const GLOBAL_VIEW: CameraDestination = {
-  kind: 'rectangle',
-  west: -180,
-  south: -58,
-  east: 180,
-  north: 72,
+  kind: 'view',
+  centerLongitude: -150,
+  centerLatitude: 6,
+  widthDegrees: 360,
+  heightDegrees: 130,
 };
 
 const SEA_SURFACE_TEMPERATURE_OPACITY = 0.8;
 
 const SIMPLIFIED_RAINFALL_CAPTION =
   'Typical El Niño rainfall tendency (simplified, based on NOAA composites)';
-const WETTER_COLOR = '#47c9d2';
-const DRIER_COLOR = '#e0a458';
-const REFERENCE_COLOR = '#ffd166';
-const WIND_COLOR = '#e8efeb';
-const WARM_WATER_COLOR = '#ff8555';
+/*
+ * Neon palette. Each label uses the same color as the map shape it describes,
+ * and the narration panel picks up the color of the newest shape on screen:
+ * cyan for water and wetter conditions, orange for warm water and drier ones.
+ */
+const WATER_COLOR = '#3ef0ff';
+const WETTER_COLOR = WATER_COLOR;
+const DRIER_COLOR = '#ff9b42';
+const WARM_WATER_COLOR = DRIER_COLOR;
+const REFERENCE_COLOR = '#fff6c2';
+const WIND_COLOR = '#eafcff';
 
 const sceneOceanWarms: StoryScene = {
   id: 'ocean-begins-to-warm',
@@ -55,14 +62,14 @@ const sceneOceanWarms: StoryScene = {
     'El Niño is a natural climate phenomenon caused by interactions between the ocean and the atmosphere. It develops when surface waters in the central and eastern equatorial Pacific become warmer than usual.',
   cameraDestination: GLOBAL_VIEW,
   cameraOrientation: TOP_DOWN,
-  cameraFlightSeconds: 1.5,
+  cameraFlightSeconds: 2,
   cameraWaypoints: [
     {
-      atMs: 2_500,
+      atMs: 2_200,
       // Centered between the central and eastern Pacific (crosses the antimeridian).
       destination: { kind: 'rectangle', west: 170, south: -25, east: -80, north: 25 },
       orientation: TOP_DOWN,
-      flightSeconds: 4,
+      flightSeconds: 5,
     },
   ],
   enabledLayers: ['seaSurfaceTemperatureAnomaly'],
@@ -71,7 +78,7 @@ const sceneOceanWarms: StoryScene = {
       id: 'equatorial-pacific-band',
       type: 'highlightArea',
       nature: 'reference',
-      color: REFERENCE_COLOR,
+      color: WATER_COLOR,
       caption: 'Equatorial Pacific',
       west: 160,
       south: -10,
@@ -84,7 +91,7 @@ const sceneOceanWarms: StoryScene = {
       id: 'equatorial-pacific-label',
       type: 'label',
       nature: 'reference',
-      color: REFERENCE_COLOR,
+      color: WATER_COLOR,
       position: [-140, 13],
       text: 'Equatorial Pacific',
       appearAtMs: 4_000,
@@ -93,7 +100,7 @@ const sceneOceanWarms: StoryScene = {
       id: 'nino-34-region',
       type: 'highlightArea',
       nature: 'reference',
-      color: '#ffffff',
+      color: WARM_WATER_COLOR,
       caption: 'Niño 3.4 monitoring region (5°N–5°S, 170°W–120°W)',
       west: -170,
       south: -5,
@@ -105,7 +112,7 @@ const sceneOceanWarms: StoryScene = {
       id: 'nino-34-label',
       type: 'label',
       nature: 'reference',
-      color: '#ffffff',
+      color: WARM_WATER_COLOR,
       position: [-145, -8],
       text: 'Niño 3.4 region',
       appearAtMs: 8_500,
@@ -124,7 +131,7 @@ const sceneCauses: StoryScene = {
     'Under normal conditions, trade winds push warm surface waters toward the western Pacific. During El Niño, these winds weaken, allowing warm water to spread toward the central and eastern Pacific. This changes atmospheric circulation and affects rainfall and temperature patterns.',
   cameraDestination: { kind: 'rectangle', west: 120, south: -20, east: -75, north: 20 },
   cameraOrientation: TOP_DOWN,
-  cameraFlightSeconds: 2,
+  cameraFlightSeconds: 2.5,
   enabledLayers: ['seaSurfaceTemperatureAnomaly'],
   visualElements: [
     // Phase 1 (0–8 s): normal conditions.
@@ -201,7 +208,7 @@ const sceneCauses: StoryScene = {
         id: `weak-trade-wind-east-${latitude}`,
         type: 'arrow' as const,
         nature: 'illustrative' as const,
-        color: 'rgba(232, 239, 235, 0.55)',
+        color: 'rgba(234, 252, 255, 0.55)',
         caption: 'Weakened trade winds (simplified)',
         path: [
           [-98, latitude],
@@ -214,7 +221,7 @@ const sceneCauses: StoryScene = {
         id: `weak-trade-wind-central-${latitude}`,
         type: 'arrow' as const,
         nature: 'illustrative' as const,
-        color: 'rgba(232, 239, 235, 0.55)',
+        color: 'rgba(234, 252, 255, 0.55)',
         caption: 'Weakened trade winds (simplified)',
         path: [
           [-140, latitude],
@@ -287,25 +294,25 @@ const sceneGlobalClimate: StoryScene = {
     'The warming Pacific changes atmospheric circulation and redistributes rainfall. Parts of South America may experience heavier rainfall, while Australia and Indonesia often face drier conditions. These changes influence weather patterns across many parts of the world.',
   cameraDestination: GLOBAL_VIEW,
   cameraOrientation: TOP_DOWN,
-  cameraFlightSeconds: 2.5,
+  cameraFlightSeconds: 3,
   cameraWaypoints: [
     {
       atMs: 3_500,
       destination: { kind: 'rectangle', west: -95, south: -45, east: -30, north: 15 },
       orientation: TOP_DOWN,
-      flightSeconds: 3,
+      flightSeconds: 3.5,
     },
     {
       atMs: 10_000,
       destination: { kind: 'rectangle', west: 90, south: -45, east: 160, north: 15 },
       orientation: TOP_DOWN,
-      flightSeconds: 3.5,
+      flightSeconds: 4.5,
     },
     {
       atMs: 16_500,
       destination: GLOBAL_VIEW,
       orientation: TOP_DOWN,
-      flightSeconds: 3,
+      flightSeconds: 3.5,
     },
   ],
   enabledLayers: ['precipitationRate'],
@@ -448,19 +455,19 @@ const sceneMexico: StoryScene = {
   // Starts over the eastern Pacific and moves toward Mexico.
   cameraDestination: { kind: 'rectangle', west: -128, south: 6, east: -82, north: 36 },
   cameraOrientation: TOP_DOWN,
-  cameraFlightSeconds: 3,
+  cameraFlightSeconds: 3.5,
   cameraWaypoints: [
     {
       atMs: 7_000,
       destination: { kind: 'rectangle', west: -119, south: 21, east: -100, north: 34 },
       orientation: TOP_DOWN,
-      flightSeconds: 3,
+      flightSeconds: 3.5,
     },
     {
       atMs: 14_500,
       destination: { kind: 'rectangle', west: -119, south: 12, east: -85, north: 34 },
       orientation: TOP_DOWN,
-      flightSeconds: 2.5,
+      flightSeconds: 3,
     },
   ],
   enabledLayers: ['precipitationRate'],
@@ -469,7 +476,7 @@ const sceneMexico: StoryScene = {
       id: 'mexico-label',
       type: 'label',
       nature: 'reference',
-      color: '#ffffff',
+      color: REFERENCE_COLOR,
       position: [-102, 23.5],
       text: 'Mexico',
       appearAtMs: 2_000,
@@ -502,7 +509,7 @@ const sceneMexico: StoryScene = {
       id: 'chihuahua-label',
       type: 'label',
       nature: 'reference',
-      color: '#ffffff',
+      color: REFERENCE_COLOR,
       position: [-106.2, 29.2],
       text: 'Chihuahua',
       appearAtMs: 8_000,
@@ -521,7 +528,7 @@ const sceneMexico: StoryScene = {
       id: 'sonora-label',
       type: 'label',
       nature: 'reference',
-      color: '#ffffff',
+      color: REFERENCE_COLOR,
       position: [-110.8, 29.7],
       text: 'Sonora',
       appearAtMs: 8_500,
@@ -530,7 +537,7 @@ const sceneMexico: StoryScene = {
       id: 'baja-california-label',
       type: 'label',
       nature: 'reference',
-      color: '#ffffff',
+      color: REFERENCE_COLOR,
       position: [-115.3, 30.4],
       text: 'Baja California',
       appearAtMs: 9_000,
@@ -587,14 +594,14 @@ const sceneGlobalConsequences: StoryScene = {
     "El Niño shows how interconnected our planet's climate really is. A change in ocean temperatures can influence rainfall, droughts, and temperatures thousands of kilometers away. Understanding these patterns helps us anticipate risks and prepare for their consequences.",
   cameraDestination: GLOBAL_VIEW,
   cameraOrientation: TOP_DOWN,
-  cameraFlightSeconds: 3.5,
+  cameraFlightSeconds: 4,
   enabledLayers: ['seaSurfaceTemperatureAnomaly'],
   visualElements: [
     {
       id: 'summary-nino-34',
       type: 'highlightArea',
       nature: 'reference',
-      color: REFERENCE_COLOR,
+      color: WARM_WATER_COLOR,
       caption: 'Niño 3.4 monitoring region',
       west: -170,
       south: -5,

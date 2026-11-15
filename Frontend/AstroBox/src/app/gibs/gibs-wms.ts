@@ -8,6 +8,9 @@ export const GIBS_WMS_EPSG4326_URL =
 export const GIBS_SEA_SURFACE_TEMPERATURE_ANOMALY_LAYER =
   'GHRSST_L4_MUR25_Sea_Surface_Temperature_Anomalies';
 
+/** GIBS layer with daily daytime land surface temperature (VIIRS, NOAA-20). Land only. */
+export const GIBS_LAND_SURFACE_TEMPERATURE_LAYER = 'VIIRS_NOAA20_Land_Surface_Temp_Day';
+
 /** GIBS layer with NASA GPM IMERG precipitation rate (already used by the app). */
 export const GIBS_PRECIPITATION_RATE_LAYER = 'IMERG_Precipitation_Rate';
 

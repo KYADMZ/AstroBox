@@ -1,0 +1,39 @@
+<div class="dock" [class.is-empty]="store.phase() !== 'docked'" aria-hidden="true">
+  <span class="dock-pad"></span>
+  <span class="dock-caption">
+    @if (store.phase() === 'docked') {
+      Drag Verny onto the map
+    } @else {
+      Verny's dock
+    }
+  </span>
+</div>
+
+<button
+  #mascot
+  type="button"
+  class="mascot"
+  [class.is-docked]="store.phase() === 'docked'"
+  [class.is-dragging]="store.phase() === 'dragging'"
+  [class.is-placed]="store.phase() === 'placed'"
+  [attr.data-mood]="store.mood()"
+  [attr.aria-label]="ariaLabel()"
+  (pointerdown)="onPointerDown($event)"
+  (pointermove)="onPointerMove($event)"
+  (pointerup)="onPointerUp($event)"
+  (pointercancel)="onPointerUp($event)"
+  (keydown)="onKeydown($event)"
+  (dblclick)="returnToDock()"
+>
+  <span class="probe-ring" aria-hidden="true"></span>
+  @for (mood of moods; track mood) {
+    <img
+      [src]="imageFor(mood)"
+      [class.is-active]="store.mood() === mood"
+      alt=""
+      draggable="false"
+      width="298"
+      height="320"
+    />
+  }
+</button>

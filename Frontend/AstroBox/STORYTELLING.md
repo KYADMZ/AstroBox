@@ -1,14 +1,39 @@
 # El Niño storytelling (2D map) and sea temperature layer (3D globe)
 
-This document describes two additions:
+This document describes:
 
 1. A guided, ~90-second **El Niño story** that runs **only on the 2D map**.
-2. A **sea surface temperature (SST) anomaly layer** on the **3D globe**, next to
-   the existing wildfire and precipitation visualizations.
+2. A **sea surface temperature (SST) anomaly layer**, available on the
+   **3D globe and the 2D map** next to wildfires and precipitation.
+3. The **AstroBox interface redesign** (frontier-navigation style in the Astro
+   mascot colors).
 
-The two features are kept strictly separate. The 3D globe has no storytelling,
-camera automation, narration, mascot or audio code. The 2D map gets the story
-but no other changes to how it already works.
+The 3D globe has no storytelling, camera automation, narration, mascot or
+audio code.
+
+---
+
+## Interface redesign
+
+- **Look:** angled map-mode tabs, hexagonal icons and a faint hex grid over the
+  map, thin glowing frames with cut corners, and a bottom hint bar. Colors come
+  from the team mascot (`public/astro-mascot.png`): deep navy and slate panels,
+  teal highlights, cream text and khaki details. Theme tokens live in
+  `src/styles.scss` (`--astro-*`).
+- **Header:** mascot + brand, `3D Globe` / `2D Map` tabs, and a readout with the
+  selected month and data feed status.
+- **Map:** the wildfire report card was removed. The **Show on map** menu is now
+  on the right side of the map (`LayerPanelComponent`). Its minimize button
+  collapses it into a small **Layers** tab at the bottom edge of the map.
+- **Timeline:** one compact row (play button, title, month slider) plus the
+  hint bar, which also shows loading and error status.
+- **Keyboard:** `Q` 3D globe · `E` 2D map · `L` show/minimize the layer menu ·
+  `Space` play/pause the timeline · `Esc` exit the story.
+- **Desktop responsiveness:** the root font size scales with the window
+  (`clamp(12px, 0.36vw + 8.4px, 17.5px)`), and every component is sized in
+  `rem`, so the UI grows from ~1280 px laptops to 2560 px monitors. Below
+  1280 px the header tightens and secondary credits hide. Phones are not
+  targeted yet.
 
 ---
 
@@ -18,7 +43,10 @@ but no other changes to how it already works.
 
 | File | Purpose |
 | --- | --- |
-| `src/app/gibs/gibs-wms.ts` | Shared NASA GIBS WMS helper (WMS 1.1.1, EPSG:4326, `image/png`, transparent, `GeographicTilingScheme`, `TIME`). Used by the 3D SST layer and the story layers. |
+| `src/app/gibs/gibs-wms.ts` | Shared NASA GIBS WMS helper (WMS 1.1.1, EPSG:4326, `image/png`, transparent, `GeographicTilingScheme`, `TIME`). Used by the SST layers and the story layers. |
+| `src/app/gibs/gibs-layer-controller.ts` | `GibsImageryLayerController`: one dated GIBS layer (show for a date, hide, opacity, errors). Used for SST on both maps. |
+| `src/app/layer-panel/layer-panel.{ts,html,scss}` | Right-side "Show on map" menu, minimizable into a bottom tab. |
+| `public/astro-mascot.png` | Mascot image for the header (one frame of the team GIF, 160 px). |
 | `src/app/storytelling/story.models.ts` | Map-agnostic TypeScript interfaces: scenes, camera, layers, visual elements, lifecycle events, and the `StoryStage` contract. |
 | `src/app/storytelling/el-nino-story.ts` | The five El Niño scenes (text, timing, camera path, layers, map annotations). |
 | `src/app/storytelling/story-player.service.ts` | `StoryPlayerService`: playback state machine (start, pause, resume, restart, exit), timing and lifecycle events. |
@@ -29,11 +57,11 @@ but no other changes to how it already works.
 
 | File | Change |
 | --- | --- |
-| `src/app/map-2d/map-2d.ts` | Provides `StoryPlayerService` (scoped to the 2D map), creates the `StoryMapDirector` after the viewer is ready, postpones regular layer updates while a story plays, adds `storyEvent` and `storyActiveChange` outputs. |
-| `src/app/map-2d/map-2d.html` | Adds `<app-story-overlay />`. |
-| `src/app/app.ts` | 3D only: new `seaTemperature` visualization with toggle, opacity, month-linked date, error handling and cleanup. Tracks `storyActive` from the 2D map. |
-| `src/app/app.html` | SST toggle (3D only), opacity slider, legend entry, error message, credit. Hides the activity card and legend while the 2D story plays. |
-| `src/app/app.scss` | Small styles for the SST toggle dot, legend swatch and opacity slider. |
+| `src/app/map-2d/map-2d.ts` | Provides `StoryPlayerService` (scoped to the 2D map), creates the `StoryMapDirector`, adds the SST layer (`seaTemperatureEnabled/Date/Opacity` inputs, `seaTemperatureErrorChange` output), postpones regular layer updates while a story plays, adds `storyEvent` and `storyActiveChange` outputs. |
+| `src/app/map-2d/map-2d.html` / `.scss` | Adds the story label layer and `<app-story-overlay />`. |
+| `src/app/app.ts` | Layout state (layer menu minimized, keyboard shortcuts), SST on both maps through `GibsImageryLayerController`, `storyActive` tracking. |
+| `src/app/app.html` / `.scss` | Redesigned shell: header tabs, map frame, layer menu, compact timeline, hint bar. |
+| `src/styles.scss` | Theme tokens, fluid desktop font scale, neon story label styles. |
 | `src/app/map.models.ts` | `VisualizationId` now includes `'seaTemperature'`. |
 
 No other viewer is created: the story reuses the 2D map's viewer, and the SST
@@ -99,10 +127,11 @@ To change dates or text, edit `el-nino-story.ts`.
 
 ---
 
-## The new SST layer on the 3D globe
+## The SST layer (3D globe and 2D map)
 
-- **Toggle:** "Sea temperature anomaly" in *Show on map*. It only appears in 3D
-  mode and is off by default, so the 3D globe starts exactly as before.
+- **Toggle:** "Sea temperature anomaly" in *Show on map*, on both maps. It is
+  off by default. On the 2D map it is hidden while the story plays and comes
+  back afterwards.
 - **Opacity:** a slider appears next to the toggle when the layer is on
   (10–100%, default 70%). It updates `ImageryLayer.alpha` directly.
 - **Date:** uses the existing six-month slider and **Play timeline** button.
@@ -116,10 +145,10 @@ To change dates or text, edit `el-nino-story.ts`.
   the precipitation layer.
 - **Errors:** tile failures (e.g. a date without data) show
   "Sea temperature anomaly imagery is unavailable for YYYY-MM-DD." in the
-  timeline panel. A request-id guard ignores errors from layers already
+  layer menu, under the layer. A request-id guard ignores errors from layers already
   replaced.
 - **Removal:** the layer is removed and destroyed when you turn it off,
-  change month, switch to the 2D map, or the component is destroyed.
+  change month, switch map, or the map is destroyed.
 
 ---
 
@@ -180,6 +209,21 @@ For fine-grained sync (e.g. lip-sync), use the signals `sceneElapsedMs()`,
 - **State restore:** camera position, orientation and 2D frustum are saved at
   start and restored exactly. Wildfire and precipitation visibility are saved
   and restored. Story layers and entities are destroyed.
+- **Smooth motion (2D story):**
+  - The camera is moved every frame from story time with a smootherstep curve
+    (no chained `flyTo`), zoom changes geometrically, and long moves zoom out
+    slightly mid-way. Pause/resume is exact.
+  - Story NASA layers are created transparent at story start so tiles load
+    early, then fade in and out (~0.7 s). Shapes and labels fade (~0.45 s).
+  - UI signals (progress, narration panel) refresh at ~12 Hz; progress bars
+    animate with CSS transforms. The map still gets exact time every frame
+    (`preciseSceneElapsedMs()` exposes it for audio/mascot sync).
+  - The 2D globe keeps more tiles cached and preloads neighboring tiles.
+- **Neon story styling:** map labels are HTML elements placed over the map
+  after every render. Their border and neon text use the same color as the
+  shape they describe (cyan for water/wetter, orange for warm water/drier,
+  cream for place names). The narration panel is very transparent and its
+  border and text take the color of the newest highlighted shape.
 - **Robustness:** errors in stage steps or scene callbacks are logged and do
   not stop playback. If a NASA layer fails, a warning appears in the story
   panel and the story continues.
