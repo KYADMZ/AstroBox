@@ -108,6 +108,102 @@ button {
   }
 }
 
+.story-launcher-expanded {
+  width: min(23rem, calc(100vw - 2rem));
+  animation: story-open 180ms ease-out;
+}
+
+.launcher-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  .eyebrow {
+    svg {
+      width: 0.9rem;
+      height: 0.9rem;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.6;
+    }
+  }
+}
+
+.collapse-story {
+  min-width: 1.9rem;
+  width: 1.9rem;
+  padding: 0;
+  clip-path: none;
+  color: var(--astro-text-muted);
+
+  svg {
+    width: 0.9rem;
+    height: 0.9rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+  }
+}
+
+.story-duration {
+  color: var(--astro-teal-bright);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.story-entry {
+  position: absolute;
+  top: 1.25rem;
+  left: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.7rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--astro-panel-border);
+  background: rgba(8, 14, 24, 0.82);
+  backdrop-filter: blur(10px);
+  clip-path: var(--astro-frame);
+  color: var(--astro-cream);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  pointer-events: auto;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+  animation: story-open 180ms ease-out;
+
+  > svg:first-child {
+    width: 1rem;
+    height: 1rem;
+    fill: none;
+    stroke: var(--astro-teal-bright);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.6;
+  }
+
+  &:hover {
+    border-color: var(--astro-teal-bright);
+    background: rgba(18, 35, 48, 0.94);
+    color: var(--astro-teal-bright);
+  }
+}
+
+.entry-chevron {
+  width: 0.8rem;
+  height: 0.8rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
 /* --------------------------------------------------------- narration panel */
 
 .story-panel {
@@ -360,13 +456,37 @@ button {
   }
 }
 
+@keyframes story-open {
+  from {
+    opacity: 0;
+    transform: translateY(-0.3rem);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .live-dot {
     animation: none;
   }
 
   .scene-fill,
-  .story-progress span {
+  .story-progress span,
+  .story-entry,
+  .story-launcher-expanded {
     transition: none;
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .story-entry,
+  .story-launcher {
+    top: 0.75rem;
+    left: 0.75rem;
+  }
+
+  .story-panel {
+    left: 0.75rem;
+    width: calc(100vw - 1.5rem);
+    max-height: 52%;
   }
 }

@@ -101,17 +101,23 @@
       </button>
     </div>
   </section>
-} @else {
-  <section class="story-launcher" aria-label="El Niño guided story">
-    <span class="eyebrow">GUIDED STORY</span>
+} @else if (expanded()) {
+  <section class="story-launcher story-launcher-expanded" aria-label="El Niño guided story details">
+    <header class="launcher-header">
+      <span class="eyebrow">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 4.5c2.8-.9 5-.5 6.5 1v11c-1.5-1.5-3.7-1.9-6.5-1V4.5Zm13 0c-2.8-.9-5-.5-6.5 1v11c1.5-1.5 3.7-1.9 6.5-1V4.5Z" /></svg>
+        GUIDED STORY
+      </span>
+      <button type="button" class="collapse-story" aria-label="Close story details" (click)="collapse()">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" /></svg>
+      </button>
+    </header>
     <strong>{{ story.title }}</strong>
     <p>
-      @if (player.status() === 'completed') {
-        Story complete. Watch it again any time.
-      } @else {
-        {{ sceneCount }} scenes · about {{ totalDurationLabel }} min · the map moves on its own
-      }
+      Follow the warming of the equatorial Pacific and discover how El Niño can
+      influence rainfall and climate patterns around the world.
     </p>
+    <span class="story-duration">{{ sceneCount }} scenes · about {{ estimatedDurationSeconds }} seconds</span>
     <button
       type="button"
       class="primary"
@@ -121,11 +127,21 @@
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6V4Z" /></svg>
       @if (!player.stageReady()) {
         Preparing map…
-      } @else if (player.status() === 'completed') {
-        Watch again
       } @else {
-        Start story
+        Start Story
       }
     </button>
   </section>
+} @else {
+  <button
+    type="button"
+    class="story-entry"
+    aria-label="Open El Niño Story details"
+    [attr.aria-expanded]="expanded()"
+    (click)="open()"
+  >
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 4.5c2.8-.9 5-.5 6.5 1v11c-1.5-1.5-3.7-1.9-6.5-1V4.5Zm13 0c-2.8-.9-5-.5-6.5 1v11c1.5-1.5 3.7-1.9 6.5-1V4.5Z" /></svg>
+    <span>El Niño Story</span>
+    <svg class="entry-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 6 6-6 6" /></svg>
+  </button>
 }

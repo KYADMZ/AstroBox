@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { EL_NINO_STORY } from '../../storytelling/el-nino-story';
 import { StoryPlayerService } from '../../storytelling/story-player.service';
 import type { StoryLayerDefinition, StoryLayerId } from '../../storytelling/story.models';
@@ -34,6 +34,10 @@ export class StoryOverlayComponent {
   protected readonly totalDurationLabel = formatDuration(
     this.story.scenes.reduce((sum, scene) => sum + scene.durationMs, 0),
   );
+  protected readonly estimatedDurationSeconds = Math.round(
+    this.story.scenes.reduce((sum, scene) => sum + scene.durationMs, 0) / 1000,
+  );
+  protected readonly expanded = signal(false);
 
   protected readonly scene = this.player.currentScene;
   protected readonly sceneNumber = computed(() => this.player.sceneIndex() + 1);
@@ -119,7 +123,16 @@ export class StoryOverlayComponent {
   });
 
   protected start(): void {
+    this.expanded.set(false);
     this.player.start(this.story);
+  }
+
+  protected open(): void {
+    this.expanded.set(true);
+  }
+
+  protected collapse(): void {
+    this.expanded.set(false);
   }
 
   protected togglePause(): void {
@@ -137,6 +150,8 @@ export class StoryOverlayComponent {
   protected onEscape(): void {
     if (this.player.isActive()) {
       this.player.cancel();
+    } else {
+      this.collapse();
     }
   }
 }

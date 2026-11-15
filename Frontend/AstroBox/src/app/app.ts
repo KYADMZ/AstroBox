@@ -22,10 +22,16 @@ import {
 import { LayerPanelComponent, type LayerPanelOption } from './layer-panel/layer-panel';
 import { Map2DComponent } from './map-2d/map-2d';
 import type { FireObservation, VisualizationId } from './map.models';
+import {
+  CLIMATE_CLASSES,
+  createClimateZoneImageryProvider,
+  createClimateZonePickHandler,
+  type ClimateZoneSelection,
+} from './climate-zones';
 import { windDateForMonth } from './wind/wind-field';
 import { WindFieldStore } from './wind/wind-field.store';
 import { WindLayerComponent } from './wind/wind-layer';
-import { WIND_SPEED_COLORS } from './wind/wind-particle-renderer';
+import { WIND_SPEED_COLORS } from './wind/wind-streamline-renderer';
 import { createCesiumProbeAdapter } from './zone-probe/cesium-probe-adapter';
 import { SoundscapeService } from './zone-probe/soundscape/soundscape.service';
 import { EnvironmentEffectsComponent } from './zone-probe/environment-effects/environment-effects';
@@ -98,6 +104,9 @@ export class App implements AfterViewInit, OnDestroy {
   private precipitationRequestId = 0;
   private seaTemperatureController?: GibsImageryLayerController;
   private surfaceTemperatureController?: GibsImageryLayerController;
+  private climateLayer?: Cesium.ImageryLayer;
+  private climateLayerRequestId = 0;
+  private climatePickHandler?: Cesium.ScreenSpaceEventHandler;
   private playInterval?: number;
   private destroyed = false;
 
@@ -109,11 +118,12 @@ export class App implements AfterViewInit, OnDestroy {
     { id: '2d', label: '2D Map' },
   ];
   protected readonly visualizations: VisualizationOption[] = [
-    { id: 'wildfires', label: 'Wildfires' },
     { id: 'precipitation', label: 'Precipitation' },
+    { id: 'wildfires', label: 'Wildfires' },
     { id: 'surfaceTemperature', label: 'Surface temperature' },
     { id: 'seaTemperature', label: 'Sea temperature anomaly' },
     { id: 'wind', label: 'Wind' },
+    { id: 'climateZones', label: 'Climate Zones' },
   ];
   /** The "Show on map" menu can be collapsed into a tab at the bottom of the map. */
   protected readonly layerPanelMinimized = signal(false);
@@ -131,6 +141,8 @@ export class App implements AfterViewInit, OnDestroy {
   protected readonly precipitationError = signal<string | null>(null);
   protected readonly seaTemperatureError = signal<string | null>(null);
   protected readonly surfaceTemperatureError = signal<string | null>(null);
+  protected readonly climateZonesError = signal<string | null>(null);
+  protected readonly climateZoneSelection = signal<ClimateZoneSelection | null>(null);
   protected readonly seaTemperatureOpacity = signal(0.7);
   /** Date requested from GIBS for the selected month (see seaTemperatureDateForMonth). */
   protected readonly seaTemperatureDate = computed(() =>
@@ -202,6 +214,11 @@ export class App implements AfterViewInit, OnDestroy {
         swatch: SEA_TEMPERATURE_SWATCH,
         error: this.seaTemperatureError(),
       },
+      climateZones: {
+        legend: 'Long-term Köppen-Geiger classes · 1991–2020',
+        swatch: 'linear-gradient(90deg, #237c50, #db9a32, #43aa93, #687fc0, #8e79b8)',
+        error: this.climateZonesError(),
+      },
     };
     return this.visualizations.map((visualization) => ({
       id: visualization.id,
@@ -210,6 +227,9 @@ export class App implements AfterViewInit, OnDestroy {
       legend: legends[visualization.id].legend,
       legendSwatch: legends[visualization.id].swatch,
       error: legends[visualization.id].error,
+      climateClasses: visualization.id === 'climateZones' ? CLIMATE_CLASSES : undefined,
+      climateSelection:
+        visualization.id === 'climateZones' ? this.climateZoneSelection() : undefined,
     }));
   });
   /** Status line shown in the bottom hint bar. */
@@ -221,7 +241,7 @@ export class App implements AfterViewInit, OnDestroy {
   });
 
   private readonly enabledVisualizations = signal<ReadonlySet<VisualizationId>>(
-    new Set(['wildfires']),
+    new Set(['precipitation']),
   );
   private readonly fireObservations = signal<FireObservation[]>([]);
 
@@ -236,6 +256,7 @@ export class App implements AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroyed = true;
     this.stopPlayback();
+    this.climatePickHandler?.destroy();
     this.viewer?.destroy();
   }
 
@@ -277,6 +298,14 @@ export class App implements AfterViewInit, OnDestroy {
 
   protected onMap2DPrecipitationError(message: string | null): void {
     this.precipitationError.set(message);
+  }
+
+  protected onMap2DClimateZonesError(message: string | null): void {
+    this.climateZonesError.set(message);
+  }
+
+  protected onMap2DClimateZoneSelection(selection: ClimateZoneSelection | null): void {
+    this.climateZoneSelection.set(selection);
   }
 
   protected onMap2DStoryActiveChange(active: boolean): void {
@@ -458,6 +487,12 @@ export class App implements AfterViewInit, OnDestroy {
           }
         },
       });
+      this.climatePickHandler = createClimateZonePickHandler(
+        cesium,
+        this.viewer,
+        () => this.isVisualizationEnabled('climateZones'),
+        (selection) => this.climateZoneSelection.set(selection),
+      );
       this.syncVisualizationLayers();
       this.updateSelectedMonthLayers();
     } catch (error) {
@@ -621,6 +656,56 @@ export class App implements AfterViewInit, OnDestroy {
     } else {
       this.surfaceTemperatureController?.hide();
     }
+    this.syncClimateZonesLayer();
+  }
+
+  private syncClimateZonesLayer(): void {
+    const viewer = this.viewer;
+    const cesium = this.cesium;
+    if (!viewer || !cesium || viewer.isDestroyed()) {
+      return;
+    }
+    if (!this.isVisualizationEnabled('climateZones')) {
+      this.climateLayerRequestId += 1;
+      if (this.climateLayer) {
+        this.climateLayer.show = false;
+      }
+      this.climateZoneSelection.set(null);
+      this.climateZonesError.set(null);
+      return;
+    }
+    if (this.climateLayer) {
+      this.climateLayer.show = true;
+      return;
+    }
+
+    const requestId = ++this.climateLayerRequestId;
+    this.climateZonesError.set(null);
+    void createClimateZoneImageryProvider(cesium, (message) => {
+      if (!this.destroyed) {
+        this.climateZonesError.set(message);
+      }
+    }).then(
+      (provider) => {
+        if (
+          this.destroyed ||
+          requestId !== this.climateLayerRequestId ||
+          !this.isVisualizationEnabled('climateZones') ||
+          this.viewer !== viewer ||
+          viewer.isDestroyed()
+        ) {
+          return;
+        }
+        this.climateLayer = viewer.imageryLayers.addImageryProvider(provider);
+        this.climateLayer.alpha = 0.78;
+      },
+      (error: unknown) => {
+        if (requestId === this.climateLayerRequestId && !this.destroyed) {
+          console.error('Unable to load the Köppen-Geiger climate layer.', error);
+          this.climateZonesError.set('Climate zone imagery is unavailable.');
+        }
+      },
+    );
   }
 
   private loadPrecipitation(date: string): void {
@@ -707,6 +792,9 @@ export class App implements AfterViewInit, OnDestroy {
   }
 
   private destroy3DMap(): void {
+    this.climateLayerRequestId += 1;
+    this.climatePickHandler?.destroy();
+    this.climatePickHandler = undefined;
     this.probeAdapter3d.set(null);
     this.removeSeaTemperatureLayer();
     this.seaTemperatureController = undefined;
@@ -715,6 +803,7 @@ export class App implements AfterViewInit, OnDestroy {
     this.removePrecipitationLayer();
     this.viewer?.destroy();
     this.viewer = undefined;
+    this.climateLayer = undefined;
     this.fireDataSource = undefined;
     this.cesium = undefined;
   }

@@ -28,6 +28,11 @@ import { StoryMapDirector, type ToggleableMapItem } from './story-map-director';
 import { StoryOverlayComponent } from './story-overlay/story-overlay';
 import { createCesiumProbeAdapter } from '../zone-probe/cesium-probe-adapter';
 import type { MapProbeAdapter } from '../zone-probe/zone-probe.models';
+import {
+  createClimateZoneImageryProvider,
+  createClimateZonePickHandler,
+  type ClimateZoneSelection,
+} from '../climate-zones';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -43,6 +48,7 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() monthKey = '';
   @Input() wildfiresEnabled = true;
   @Input() precipitationEnabled = false;
+  @Input() climateZonesEnabled = false;
   @Input() seaTemperatureEnabled = false;
   /** ISO date requested from GIBS for the sea temperature anomaly layer. */
   @Input() seaTemperatureDate = '';
@@ -52,6 +58,8 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() surfaceTemperatureDate = '';
   @Output() mapErrorChange = new EventEmitter<string | null>();
   @Output() precipitationErrorChange = new EventEmitter<string | null>();
+  @Output() climateZonesErrorChange = new EventEmitter<string | null>();
+  @Output() climateZoneSelectionChange = new EventEmitter<ClimateZoneSelection | null>();
   @Output() seaTemperatureErrorChange = new EventEmitter<string | null>();
   @Output() surfaceTemperatureErrorChange = new EventEmitter<string | null>();
   /** Re-emits every storytelling lifecycle event (for future mascot/audio integration). */
@@ -69,6 +77,9 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
   private precipitationLayer?: Cesium.ImageryLayer;
   private precipitationDate?: string;
   private precipitationRequestId = 0;
+  private climateLayer?: Cesium.ImageryLayer;
+  private climateLayerRequestId = 0;
+  private climatePickHandler?: Cesium.ScreenSpaceEventHandler;
   private seaTemperatureController?: GibsImageryLayerController;
   private surfaceTemperatureController?: GibsImageryLayerController;
   private destroyed = false;
@@ -77,6 +88,7 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
   /** Input changes received while a story is playing, applied once it ends. */
   private pendingFireSync = false;
   private pendingPrecipitationSync = false;
+  private pendingClimateZonesSync = false;
   private pendingSeaTemperatureSync = false;
   private pendingSurfaceTemperatureSync = false;
 
@@ -115,6 +127,13 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
         this.syncPrecipitationLayer();
       }
     }
+    if (changes['climateZonesEnabled']) {
+      if (storyActive) {
+        this.pendingClimateZonesSync = true;
+      } else {
+        this.syncClimateZonesLayer();
+      }
+    }
     if (changes['seaTemperatureOpacity']) {
       this.seaTemperatureController?.setOpacity(this.seaTemperatureOpacity);
     }
@@ -143,6 +162,8 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.seaTemperatureController?.hide();
     this.surfaceTemperatureController?.hide();
     this.removePrecipitationLayer();
+    this.climateLayerRequestId += 1;
+    this.climatePickHandler?.destroy();
     this.viewer?.destroy();
   }
 
@@ -223,16 +244,72 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
       });
       this.updateFireMarkers();
       this.syncPrecipitationLayer();
+      this.syncClimateZonesLayer();
       this.syncSeaTemperatureLayer();
       this.syncSurfaceTemperatureLayer();
       this.attachStoryDirector(cesium, this.viewer);
       this.probeAdapterChange.emit(createCesiumProbeAdapter(cesium, this.viewer));
+      this.climatePickHandler = createClimateZonePickHandler(
+        cesium,
+        this.viewer,
+        () => this.climateZonesEnabled,
+        (selection) => this.climateZoneSelectionChange.emit(selection),
+      );
     } catch (error) {
       if (!this.destroyed) {
         console.error('Unable to initialize the Cesium 2D map.', error);
         this.mapErrorChange.emit('The 2D map could not be loaded.');
       }
     }
+  }
+
+  private syncClimateZonesLayer(): void {
+    const viewer = this.viewer;
+    const cesium = this.cesium;
+    if (!viewer || !cesium || viewer.isDestroyed()) {
+      return;
+    }
+    if (!this.climateZonesEnabled) {
+      this.climateLayerRequestId += 1;
+      if (this.climateLayer) {
+        this.climateLayer.show = false;
+      }
+      this.climateZoneSelectionChange.emit(null);
+      this.climateZonesErrorChange.emit(null);
+      return;
+    }
+    if (this.climateLayer) {
+      this.climateLayer.show = true;
+      return;
+    }
+
+    const requestId = ++this.climateLayerRequestId;
+    this.climateZonesErrorChange.emit(null);
+    void createClimateZoneImageryProvider(cesium, (message) => {
+      if (!this.destroyed) {
+        this.climateZonesErrorChange.emit(message);
+      }
+    }).then(
+      (provider) => {
+        if (
+          this.destroyed ||
+          requestId !== this.climateLayerRequestId ||
+          !this.climateZonesEnabled ||
+          this.viewer !== viewer ||
+          viewer.isDestroyed()
+        ) {
+          return;
+        }
+        this.climateLayer = viewer.imageryLayers.addImageryProvider(provider);
+        this.climateLayer.alpha = 0.78;
+      },
+      (error: unknown) => {
+        if (requestId === this.climateLayerRequestId && !this.destroyed) {
+          console.error('Unable to load the Köppen-Geiger climate layer.', error);
+          this.climateZonesErrorChange.emit('Climate zone imagery is unavailable.');
+        }
+      },
+    );
   }
 
   private attachStoryDirector(cesium: typeof Cesium, viewer: Cesium.Viewer): void {
@@ -245,6 +322,7 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
         [
           this.fireDataSource,
           this.precipitationLayer,
+          this.climateLayer,
           this.seaTemperatureController?.imageryLayer,
           this.surfaceTemperatureController?.imageryLayer,
         ].filter(
@@ -279,6 +357,10 @@ export class Map2DComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (this.pendingPrecipitationSync) {
       this.pendingPrecipitationSync = false;
       this.syncPrecipitationLayer();
+    }
+    if (this.pendingClimateZonesSync) {
+      this.pendingClimateZonesSync = false;
+      this.syncClimateZonesLayer();
     }
     if (this.pendingSeaTemperatureSync) {
       this.pendingSeaTemperatureSync = false;

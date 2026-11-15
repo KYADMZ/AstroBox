@@ -6,6 +6,7 @@ import {
   Output,
 } from '@angular/core';
 import type { VisualizationId } from '../map.models';
+import type { ClimateClass, ClimateZoneSelection } from '../climate-zones';
 
 export interface LayerPanelOption {
   id: VisualizationId;
@@ -17,6 +18,8 @@ export interface LayerPanelOption {
   legendSwatch?: string;
   /** Error message for this layer, if any. */
   error?: string | null;
+  climateClasses?: readonly ClimateClass[];
+  climateSelection?: ClimateZoneSelection | null;
 }
 
 /**
@@ -43,6 +46,10 @@ export class LayerPanelComponent {
 
   protected get opacityPercent(): number {
     return Math.round(this.seaTemperatureOpacity * 100);
+  }
+
+  protected coordinate(value: number): string {
+    return value.toFixed(2);
   }
 
   protected setMinimized(minimized: boolean): void {

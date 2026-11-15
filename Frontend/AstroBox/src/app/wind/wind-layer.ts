@@ -11,11 +11,11 @@ import {
 } from '@angular/core';
 import type { MapProbeAdapter } from '../zone-probe/zone-probe.models';
 import { WindFieldStore } from './wind-field.store';
-import { WindParticleRenderer } from './wind-particle-renderer';
+import { WindStreamlineRenderer } from './wind-streamline-renderer';
 
 /**
- * Animated wind visualization (flowing particles colored by speed) over the
- * visible map. Works on the 3D globe and the 2D map through the map adapter.
+ * Animated wind streamlines colored by speed over the visible map. Works on
+ * the 3D globe and the 2D map through the map adapter.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -47,7 +47,7 @@ export class WindLayerComponent {
   private readonly store = inject(WindFieldStore);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly canvas = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
-  private renderer?: WindParticleRenderer;
+  private renderer?: WindStreamlineRenderer;
 
   constructor() {
     // Read the signals unconditionally: with `this.renderer?.set(this.x())`
@@ -69,7 +69,7 @@ export class WindLayerComponent {
     let observer: ResizeObserver | undefined;
     afterNextRender(() => {
       try {
-        this.renderer = new WindParticleRenderer(
+        this.renderer = new WindStreamlineRenderer(
           this.canvas().nativeElement,
           matchMedia('(prefers-reduced-motion: reduce)').matches,
         );

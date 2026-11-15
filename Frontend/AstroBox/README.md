@@ -44,6 +44,24 @@ To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use th
 ng test
 ```
 
+## Climate Zones layer
+
+The Climate Zones layer uses the Köppen-Geiger classification from Beck et al.
+(2023), based on long-term climate normals for 1991–2020. The source product is
+the global 1 km dataset distributed by [GloH2O](https://www.gloh2o.org/koppen/)
+and [Figshare](https://doi.org/10.6084/m9.figshare.21789074); the map requests
+the 2005 midpoint slice for the 1991–2020 period from Esri's public global
+[ImageServer](https://tiledimageservices.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/Koppen_Geiger_Climate_Classification/ImageServer).
+The dataset is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Attribution: Beck et al. (2023), *Scientific Data*, 10, 724,
+[doi:10.1038/s41597-023-02549-6](https://doi.org/10.1038/s41597-023-02549-6).
+
+The map uses the source's LERC raster tiles and class values, not boundaries
+estimated from current weather. The `lerc` package (Apache-2.0) decodes these
+tiles in the browser. The service currently exposes levels through 0.0083333°
+pixels; data gaps remain unclassified and transparent. Selecting a valid land
+pixel displays its actual class code and description.
+
 ## Running end-to-end tests
 
 For end-to-end (e2e) testing, run:

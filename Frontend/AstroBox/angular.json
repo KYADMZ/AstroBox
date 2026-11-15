@@ -43,6 +43,16 @@
                 "glob": "**/*",
                 "input": "node_modules/cesium/Build/Cesium/Workers",
                 "output": "assets/cesium/Workers"
+              },
+              {
+                "glob": "lerc-wasm.wasm",
+                "input": "node_modules/lerc",
+                "output": "assets/lerc"
+              },
+              {
+                "glob": "LercDecode.js",
+                "input": "node_modules/lerc",
+                "output": "assets/lerc"
               }
             ],
             "styles": [

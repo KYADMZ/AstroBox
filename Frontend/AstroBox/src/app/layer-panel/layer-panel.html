@@ -15,7 +15,7 @@
     <header class="panel-header">
       <span class="panel-mark" aria-hidden="true"></span>
       <div>
-        <span class="kicker">FRONTIER LAYERS</span>
+        <span class="kicker">VISUALIZATION LAYERS</span>
         <h2>Show on map</h2>
       </div>
       <button
@@ -52,6 +52,9 @@
                 @case ('surfaceTemperature') {
                   <svg viewBox="0 0 24 24"><path d="M10 13.5V5a2 2 0 0 1 4 0v8.5a4 4 0 1 1-4 0ZM12 9v7" /></svg>
                 }
+                @case ('climateZones') {
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M3.8 9h16.4M3.8 15h16.4M12 3.5c2.2 2.3 3.2 5.1 3.2 8.5s-1 6.2-3.2 8.5c-2.2-2.3-3.2-5.1-3.2-8.5s1-6.2 3.2-8.5Z" /></svg>
+                }
                 @default {
                   <svg viewBox="0 0 24 24"><path d="M3 9c2.2 0 2.2-1.6 4.5-1.6S9.8 9 12 9s2.3-1.6 4.5-1.6S18.8 9 21 9M3 14c2.2 0 2.2-1.6 4.5-1.6S9.8 14 12 14s2.3-1.6 4.5-1.6S18.8 14 21 14M3 19c2.2 0 2.2-1.6 4.5-1.6S9.8 19 12 19s2.3-1.6 4.5-1.6S18.8 19 21 19" /></svg>
                 }
@@ -68,6 +71,30 @@
               <span class="swatch" [style.background]="option.legendSwatch" aria-hidden="true"></span>
               <span>{{ option.legend }}</span>
             </div>
+          }
+
+          @if (option.active && option.id === 'climateZones' && option.climateClasses) {
+            <div class="climate-legend" aria-label="Köppen-Geiger climate classes">
+              @for (climateClass of option.climateClasses; track climateClass.code) {
+                <div class="climate-legend-row">
+                  <span class="climate-swatch" [style.background]="climateClass.color" aria-hidden="true"></span>
+                  <span><strong>{{ climateClass.code }}</strong> {{ climateClass.name }}<small>{{ climateClass.description }}</small></span>
+                </div>
+              }
+              <a
+                class="climate-credit"
+                href="https://doi.org/10.1038/s41597-023-02549-6"
+                target="_blank"
+                rel="noopener noreferrer"
+              >Beck et al. (2023) · 1 km · 1991–2020 · CC BY 4.0</a>
+            </div>
+            @if (option.climateSelection; as climateSelection) {
+              <div class="climate-selection" aria-live="polite">
+                <strong>{{ climateSelection.code }} · {{ climateSelection.name }}</strong>
+                <span>{{ climateSelection.description }}</span>
+                <small>{{ coordinate(climateSelection.latitude) }}°, {{ coordinate(climateSelection.longitude) }}°</small>
+              </div>
+            }
           }
 
           @if (option.active && option.id === 'seaTemperature') {

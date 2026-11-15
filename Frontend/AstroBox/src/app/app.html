@@ -66,6 +66,7 @@
         [monthKey]="selectedMonth().key"
         [wildfiresEnabled]="isVisualizationEnabled('wildfires')"
         [precipitationEnabled]="isVisualizationEnabled('precipitation')"
+        [climateZonesEnabled]="isVisualizationEnabled('climateZones')"
         [seaTemperatureEnabled]="isVisualizationEnabled('seaTemperature')"
         [seaTemperatureDate]="seaTemperatureDate()"
         [seaTemperatureOpacity]="seaTemperatureOpacity()"
@@ -74,12 +75,14 @@
         (surfaceTemperatureErrorChange)="onMap2DSurfaceTemperatureError($event)"
         (mapErrorChange)="onMap2DError($event)"
         (precipitationErrorChange)="onMap2DPrecipitationError($event)"
+        (climateZonesErrorChange)="onMap2DClimateZonesError($event)"
+        (climateZoneSelectionChange)="onMap2DClimateZoneSelection($event)"
         (seaTemperatureErrorChange)="onMap2DSeaTemperatureError($event)"
         (storyActiveChange)="onMap2DStoryActiveChange($event)"
         (probeAdapterChange)="onMap2DProbeAdapterChange($event)"
       />
     }
-    <!-- Animated wind particles over either map. -->
+    <!-- Animated wind streamlines over either map. -->
     <app-wind-layer
       [adapter]="probeAdapter()"
       [active]="isVisualizationEnabled('wind') && !storyActive()"

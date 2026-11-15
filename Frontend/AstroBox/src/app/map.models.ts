@@ -11,7 +11,8 @@ export type VisualizationId =
   | 'precipitation'
   | 'surfaceTemperature'
   | 'seaTemperature'
-  | 'wind';
+  | 'wind'
+  | 'climateZones';
 
 /** A geographic position in degrees. */
 export interface GeoPoint {
