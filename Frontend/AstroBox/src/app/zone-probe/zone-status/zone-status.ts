@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import type { PrecipitationLevel, ZoneMood } from '../zone-probe.models';
 import { ZONE_THRESHOLDS } from '../zone-probe.models';
 import { ZoneProbeStore } from '../zone-probe.store';
+import { ambienceForClimateCode } from '../soundscape/climate-ambience';
 
 const MOOD_TITLES: Record<ZoneMood, string> = {
   cold: 'Very cold zone',
@@ -32,6 +33,11 @@ export class ZoneStatusComponent {
   protected readonly moodImage = computed(() => `verny/verny-${this.store.mood()}.png`);
   protected readonly precipitationLabel = computed(
     () => PRECIPITATION_LABELS[this.store.precipitationLevel()],
+  );
+
+  /** "Jungle", "Desert"… the nature sounds played for the climate zone. */
+  protected readonly zoneSoundscape = computed(
+    () => ambienceForClimateCode(this.store.climateZone()?.code)?.label ?? null,
   );
 
   protected readonly coordinates = computed(() => {

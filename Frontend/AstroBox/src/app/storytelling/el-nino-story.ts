@@ -94,6 +94,7 @@ const sceneOceanWarms: StoryScene = {
       color: WATER_COLOR,
       position: [-140, 13],
       text: 'Equatorial Pacific',
+      icon: 'wave',
       appearAtMs: 4_000,
     },
     {
@@ -115,8 +116,14 @@ const sceneOceanWarms: StoryScene = {
       color: WARM_WATER_COLOR,
       position: [-145, -8],
       text: 'Niño 3.4 region',
+      icon: 'thermometer',
       appearAtMs: 8_500,
     },
+  ],
+  audio: [
+    // Open ocean with a light breeze.
+    { channel: 'waves', level: 0.75 },
+    { channel: 'wind', level: 0.22 },
   ],
   cues: { audioTrackId: 'el-nino-scene-1', mascotAnimationId: 'intro-wave' },
   onEnter: ({ stage }) =>
@@ -200,6 +207,7 @@ const sceneCauses: StoryScene = {
       color: WIND_COLOR,
       position: [-150, 14],
       text: 'Normal conditions: strong trade winds',
+      icon: 'wind',
       disappearAtMs: 8_000,
     },
     // Phase 2 (8–17 s): El Niño conditions.
@@ -277,8 +285,17 @@ const sceneCauses: StoryScene = {
       color: WARM_WATER_COLOR,
       position: [-150, 14],
       text: 'El Niño: winds weaken, warm water moves east',
+      icon: 'warmWater',
       appearAtMs: 8_000,
     },
+  ],
+  audio: [
+    // Normal conditions: strong trade winds whistle over the sea.
+    { channel: 'waves', level: 0.6 },
+    { channel: 'wind', level: 0.55, untilMs: 8_000 },
+    { channel: 'whistle', level: 0.55, untilMs: 8_000 },
+    // El Niño: the winds weaken and the sea calms.
+    { channel: 'wind', level: 0.2, fromMs: 8_000 },
   ],
   cues: { audioTrackId: 'el-nino-scene-2', mascotAnimationId: 'point-east' },
   onEnter: ({ stage }) => stage.setLayerOpacity('seaSurfaceTemperatureAnomaly', 0.55),
@@ -339,6 +356,7 @@ const sceneGlobalClimate: StoryScene = {
       color: WETTER_COLOR,
       position: [-88, -6],
       text: 'Wetter: coastal Ecuador & northern Peru',
+      icon: 'flood',
       appearAtMs: 5_000,
     },
     {
@@ -364,6 +382,7 @@ const sceneGlobalClimate: StoryScene = {
       color: WETTER_COLOR,
       position: [-50, -39],
       text: 'Wetter: southeastern South America',
+      icon: 'rain',
       appearAtMs: 6_000,
     },
     {
@@ -388,6 +407,7 @@ const sceneGlobalClimate: StoryScene = {
       color: DRIER_COLOR,
       position: [-55, 9],
       text: 'Drier: northern South America',
+      icon: 'drought',
       appearAtMs: 7_000,
     },
     {
@@ -414,6 +434,7 @@ const sceneGlobalClimate: StoryScene = {
       color: DRIER_COLOR,
       position: [116, 9],
       text: 'Drier: Indonesia',
+      icon: 'drought',
       appearAtMs: 11_500,
     },
     {
@@ -440,8 +461,19 @@ const sceneGlobalClimate: StoryScene = {
       color: DRIER_COLOR,
       position: [142, -41],
       text: 'Drier: northern & eastern Australia',
+      icon: 'drought',
       appearAtMs: 13_000,
     },
+  ],
+  audio: [
+    { channel: 'waves', level: 0.35, untilMs: 4_500 },
+    // Wetter South America: heavy rain and thunder.
+    { channel: 'rain', level: 0.7, fromMs: 4_500, untilMs: 10_000 },
+    { channel: 'thunder', level: 0.6, fromMs: 4_500, untilMs: 10_000 },
+    // Drier Indonesia and Australia: hot, dry wind and cicadas.
+    { channel: 'desert', level: 0.6, fromMs: 10_500, untilMs: 16_500 },
+    { channel: 'cicadas', level: 0.55, fromMs: 11_000, untilMs: 16_500 },
+    { channel: 'waves', level: 0.4, fromMs: 16_500 },
   ],
   cues: { audioTrackId: 'el-nino-scene-3', mascotAnimationId: 'world-tour' },
 };
@@ -479,6 +511,7 @@ const sceneMexico: StoryScene = {
       color: REFERENCE_COLOR,
       position: [-102, 23.5],
       text: 'Mexico',
+      icon: 'pin',
       appearAtMs: 2_000,
       disappearAtMs: 7_000,
     },
@@ -512,6 +545,7 @@ const sceneMexico: StoryScene = {
       color: REFERENCE_COLOR,
       position: [-106.2, 29.2],
       text: 'Chihuahua',
+      icon: 'pin',
       appearAtMs: 8_000,
     },
     {
@@ -531,6 +565,7 @@ const sceneMexico: StoryScene = {
       color: REFERENCE_COLOR,
       position: [-110.8, 29.7],
       text: 'Sonora',
+      icon: 'pin',
       appearAtMs: 8_500,
     },
     {
@@ -540,6 +575,7 @@ const sceneMexico: StoryScene = {
       color: REFERENCE_COLOR,
       position: [-115.3, 30.4],
       text: 'Baja California',
+      icon: 'pin',
       appearAtMs: 9_000,
     },
     {
@@ -549,6 +585,7 @@ const sceneMexico: StoryScene = {
       color: WETTER_COLOR,
       position: [-113, 23.2],
       text: 'Northwestern Mexico: wetter winters in some El Niño events',
+      icon: 'rain',
       appearAtMs: 10_000,
     },
     {
@@ -579,8 +616,19 @@ const sceneMexico: StoryScene = {
       color: DRIER_COLOR,
       position: [-96, 14],
       text: 'Central & southern Mexico: reduced rainfall or drought possible',
+      icon: 'drought',
       appearAtMs: 15_500,
     },
+  ],
+  audio: [
+    { channel: 'waves', level: 0.45, untilMs: 3_500 },
+    // Wetter winters in northwestern Mexico.
+    { channel: 'rain', level: 0.55, fromMs: 3_500, untilMs: 14_500 },
+    { channel: 'wind', level: 0.3, fromMs: 3_500, untilMs: 14_500 },
+    { channel: 'thunder', level: 0.3, fromMs: 5_000, untilMs: 14_500 },
+    // Reduced rainfall or drought in central and southern Mexico.
+    { channel: 'desert', level: 0.5, fromMs: 15_000 },
+    { channel: 'cicadas', level: 0.55, fromMs: 15_000 },
   ],
   cues: { audioTrackId: 'el-nino-scene-4', mascotAnimationId: 'mexico-focus' },
   onEnter: ({ stage }) => stage.setLayerOpacity('precipitationRate', 0.6),
@@ -643,6 +691,10 @@ const sceneGlobalConsequences: StoryScene = {
       description: 'Wetter and drier patterns appear far away.',
     },
   ],
+  audio: [
+    { channel: 'waves', level: 0.5, untilMs: 16_500 },
+    { channel: 'wind', level: 0.15, untilMs: 16_500 },
+  ],
   cues: { audioTrackId: 'el-nino-scene-5', mascotAnimationId: 'outro-bow' },
   onEnter: ({ stage }) => stage.setLayerOpacity('seaSurfaceTemperatureAnomaly', 0.65),
 };
@@ -650,6 +702,8 @@ const sceneGlobalConsequences: StoryScene = {
 export const EL_NINO_STORY: StoryDefinition = {
   id: 'el-nino',
   title: 'Understanding El Niño',
+  description:
+    'Follow the warming of the equatorial Pacific and discover how El Niño can influence rainfall and climate patterns around the world.',
   layers: {
     seaSurfaceTemperatureAnomaly: {
       id: 'seaSurfaceTemperatureAnomaly',

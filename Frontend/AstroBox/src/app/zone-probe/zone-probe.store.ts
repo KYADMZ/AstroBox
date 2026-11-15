@@ -1,5 +1,7 @@
 import { Injectable, OnDestroy, computed, signal } from '@angular/core';
+import { lookupClimateClass, type ClimateClass } from '../climate-zones';
 import type { FireObservation, GeoPoint } from '../map.models';
+import { whistleStrength } from './soundscape/sound-mix';
 import { fetchClimateSummary, toPowerCell } from './nasa-power.client';
 import {
   ZONE_THRESHOLDS,
@@ -35,16 +37,23 @@ export class ZoneProbeStore implements OnDestroy {
   private readonly climateState = signal<ClimateSummary | null>(null);
   private readonly climateStatusState = signal<ClimateStatus>('idle');
   private readonly climateErrorState = signal<string | null>(null);
+  private readonly climateZoneState = signal<ClimateClass | null>(null);
+  private readonly climateZoneStatusState = signal<ClimateStatus>('idle');
 
   private readonly cache = new Map<string, Promise<ClimateSummary>>();
   private requestToken = 0;
   private previewTimer?: ReturnType<typeof setTimeout>;
+  private zoneTimer?: ReturnType<typeof setTimeout>;
+  private zoneToken = 0;
 
   readonly phase = this.phaseState.asReadonly();
   readonly location = this.placedLocation.asReadonly();
   readonly climate = this.climateState.asReadonly();
   readonly climateStatus = this.climateStatusState.asReadonly();
   readonly climateError = this.climateErrorState.asReadonly();
+  /** Köppen-Geiger class under Verny (null over oceans or while unknown). */
+  readonly climateZone = this.climateZoneState.asReadonly();
+  readonly climateZoneStatus = this.climateZoneStatusState.asReadonly();
 
   /** The point being inspected: the drag position or the drop position. */
   readonly focus = computed<GeoPoint | null>(() => {
@@ -138,6 +147,21 @@ export class ZoneProbeStore implements OnDestroy {
     };
   });
 
+  /**
+   * 0–1 strength of the "strong wind" whistle. Uses the monthly mean wind and,
+   * more gently, the windiest day, so gusty places whistle too.
+   */
+  readonly strongWind = computed(() => {
+    if (this.phaseState() !== 'placed') {
+      return 0;
+    }
+    const climate = this.climateState();
+    return Math.max(
+      whistleStrength(climate?.windSpeedMs ?? 0),
+      0.6 * whistleStrength(climate?.maxWindSpeedMs ?? 0),
+    );
+  });
+
   /** Called by the app whenever the selected month or its wildfires change. */
   setContext(monthKey: string, fires: readonly FireObservation[]): void {
     const monthChanged = monthKey !== this.monthKeyState();
@@ -158,6 +182,7 @@ export class ZoneProbeStore implements OnDestroy {
     this.previewLocation.set(point ?? null);
     if (point) {
       this.loadClimate(point, PREVIEW_DEBOUNCE_MS);
+      this.loadClimateZone(point, PREVIEW_DEBOUNCE_MS);
     } else {
       this.clearPreviewTimer();
     }
@@ -168,6 +193,7 @@ export class ZoneProbeStore implements OnDestroy {
     this.previewLocation.set(null);
     this.phaseState.set('placed');
     this.loadClimate(point, 0);
+    this.loadClimateZone(point, 0);
   }
 
   /** Sends Verny back to its dock and stops all effects. */
@@ -180,10 +206,50 @@ export class ZoneProbeStore implements OnDestroy {
     this.climateState.set(null);
     this.climateStatusState.set('idle');
     this.climateErrorState.set(null);
+    if (this.zoneTimer !== undefined) {
+      clearTimeout(this.zoneTimer);
+      this.zoneTimer = undefined;
+    }
+    this.zoneToken += 1;
+    this.climateZoneState.set(null);
+    this.climateZoneStatusState.set('idle');
   }
 
   ngOnDestroy(): void {
     this.clearPreviewTimer();
+  }
+
+  /** Looks up the climate zone (Köppen-Geiger raster) under a point. */
+  private loadClimateZone(point: GeoPoint, delayMs: number): void {
+    if (this.zoneTimer !== undefined) {
+      clearTimeout(this.zoneTimer);
+      this.zoneTimer = undefined;
+    }
+    const run = (): void => {
+      this.zoneTimer = undefined;
+      const token = ++this.zoneToken;
+      this.climateZoneStatusState.set('loading');
+      lookupClimateClass(point.longitude, point.latitude).then(
+        (climateClass) => {
+          if (token === this.zoneToken) {
+            this.climateZoneState.set(climateClass ?? null);
+            this.climateZoneStatusState.set('ready');
+          }
+        },
+        (error: unknown) => {
+          if (token === this.zoneToken) {
+            console.error('Unable to look up the climate zone under Verny.', error);
+            this.climateZoneState.set(null);
+            this.climateZoneStatusState.set('error');
+          }
+        },
+      );
+    };
+    if (delayMs > 0) {
+      this.zoneTimer = setTimeout(run, delayMs);
+    } else {
+      run();
+    }
   }
 
   private loadClimate(point: GeoPoint, delayMs: number): void {

@@ -1,14 +1,14 @@
 @if (player.isActive() && scene(); as currentScene) {
-  <section class="story-panel" aria-label="El Niño guided story">
+  <section class="story-panel" [attr.aria-label]="story().title + ' guided story'">
     <header class="story-panel-header">
       <span class="eyebrow">
         <span class="live-dot" [class.paused]="player.status() === 'paused'" aria-hidden="true"></span>
-        SCENE {{ sceneNumber() }} OF {{ sceneCount }}
+        SCENE {{ sceneNumber() }} OF {{ sceneCount() }}
         @if (player.status() === 'paused') {
           <span class="paused-tag">PAUSED</span>
         }
       </span>
-      <span class="story-time">{{ elapsedLabel() }} / {{ totalDurationLabel }}</span>
+      <span class="story-time">{{ elapsedLabel() }} / {{ totalDurationLabel() }}</span>
     </header>
 
     <ol class="scene-indicator" aria-label="Story scenes">
@@ -52,6 +52,7 @@
               class="swatch"
               [class.sst]="layer.id === 'seaSurfaceTemperatureAnomaly'"
               [class.rain]="layer.id === 'precipitationRate'"
+              [class.koppen]="layer.id === 'climateZones'"
               aria-hidden="true"
             ></span>
             <span>
@@ -102,46 +103,52 @@
     </div>
   </section>
 } @else if (expanded()) {
-  <section class="story-launcher story-launcher-expanded" aria-label="El Niño guided story details">
+  <section class="story-launcher story-launcher-expanded" aria-label="Guided stories">
     <header class="launcher-header">
       <span class="eyebrow">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 4.5c2.8-.9 5-.5 6.5 1v11c-1.5-1.5-3.7-1.9-6.5-1V4.5Zm13 0c-2.8-.9-5-.5-6.5 1v11c1.5-1.5 3.7-1.9 6.5-1V4.5Z" /></svg>
-        GUIDED STORY
+        GUIDED STORIES
       </span>
-      <button type="button" class="collapse-story" aria-label="Close story details" (click)="collapse()">
+      <button type="button" class="collapse-story" aria-label="Close story list" (click)="collapse()">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" /></svg>
       </button>
     </header>
-    <strong>{{ story.title }}</strong>
-    <p>
-      Follow the warming of the equatorial Pacific and discover how El Niño can
-      influence rainfall and climate patterns around the world.
-    </p>
-    <span class="story-duration">{{ sceneCount }} scenes · about {{ estimatedDurationSeconds }} seconds</span>
-    <button
-      type="button"
-      class="primary"
-      [disabled]="!player.stageReady()"
-      (click)="start()"
-    >
-      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6V4Z" /></svg>
-      @if (!player.stageReady()) {
-        Preparing map…
-      } @else {
-        Start Story
+    <ul class="story-cards">
+      @for (card of storyCards; track card.story.id) {
+        <li class="story-card">
+          <strong>{{ card.story.title }}</strong>
+          <p>{{ card.story.description }}</p>
+          <div class="story-card-footer">
+            <span class="story-duration">{{ card.sceneCount }} scenes · about {{ card.durationSeconds }} seconds</span>
+            <button
+              type="button"
+              class="primary"
+              [disabled]="!player.stageReady()"
+              [attr.aria-label]="'Start story: ' + card.story.title"
+              (click)="start(card.story)"
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6V4Z" /></svg>
+              @if (!player.stageReady()) {
+                Preparing…
+              } @else {
+                Start
+              }
+            </button>
+          </div>
+        </li>
       }
-    </button>
+    </ul>
   </section>
 } @else {
   <button
     type="button"
     class="story-entry"
-    aria-label="Open El Niño Story details"
+    aria-label="Open guided stories"
     [attr.aria-expanded]="expanded()"
     (click)="open()"
   >
     <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 4.5c2.8-.9 5-.5 6.5 1v11c-1.5-1.5-3.7-1.9-6.5-1V4.5Zm13 0c-2.8-.9-5-.5-6.5 1v11c1.5-1.5 3.7-1.9 6.5-1V4.5Z" /></svg>
-    <span>El Niño Story</span>
+    <span>Guided Stories</span>
     <svg class="entry-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 6 6-6 6" /></svg>
   </button>
 }

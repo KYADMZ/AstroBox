@@ -1,5 +1,7 @@
 import type * as Cesium from 'cesium';
+import { createClimateZoneImageryProvider } from '../climate-zones';
 import { createGibsWmsProvider } from '../gibs/gibs-wms';
+import { createStoryIcon, type StoryIconId } from '../storytelling/story-icons';
 import type {
   CameraDestination,
   LonLat,
@@ -110,6 +112,7 @@ export class StoryMapDirector implements StoryStage {
   private removePostRender?: () => void;
   private lastPostRenderAt?: number;
   private layerGeneration = 0;
+  private currentScene?: StoryScene;
   private readonly scratchWindow: Cesium.Cartesian2;
 
   constructor(
@@ -159,6 +162,9 @@ export class StoryMapDirector implements StoryStage {
 
     this.layerOpacity.clear();
     for (const definition of Object.values(story.layers)) {
+      if (!definition) {
+        continue;
+      }
       this.layerOpacity.set(definition.id, definition.opacity);
       this.preloadLayer(definition.id);
     }
@@ -172,8 +178,9 @@ export class StoryMapDirector implements StoryStage {
       return;
     }
     this.appliedWaypoints.clear();
+    this.currentScene = scene;
     for (const [id, state] of this.layers) {
-      state.target = scene.enabledLayers.includes(id) ? (this.layerOpacity.get(id) ?? 1) : 0;
+      state.target = this.targetOpacity(id);
     }
     this.startCameraMove(scene.cameraDestination, 0, scene.cameraFlightSeconds * 1000);
   }
@@ -223,6 +230,7 @@ export class StoryMapDirector implements StoryStage {
   end(): void {
     const snapshot = this.snapshot;
     this.snapshot = undefined;
+    this.currentScene = undefined;
     this.tween = undefined;
     this.currentBox = undefined;
     this.removePostRender?.();
@@ -493,6 +501,32 @@ export class StoryMapDirector implements StoryStage {
     }
 
     const generation = this.layerGeneration;
+    const reportError = (error: unknown): void => {
+      if (generation !== this.layerGeneration) {
+        return;
+      }
+      console.error(`Unable to load story layer "${definition.label}".`, error);
+      this.options.onLayerError(
+        `${definition.label} is unavailable. The story continues without it.`,
+      );
+    };
+    const addLayer = (provider: Cesium.ImageryProvider): void => {
+      if (generation !== this.layerGeneration || this.viewer.isDestroyed()) {
+        return;
+      }
+      const layer = this.viewer.imageryLayers.addImageryProvider(provider);
+      layer.alpha = 0;
+      this.layers.set(id, { layer, target: this.targetOpacity(id) });
+    };
+
+    if (definition.source === 'koppen') {
+      // The Köppen-Geiger raster needs its LERC decoder first (async).
+      void createClimateZoneImageryProvider(this.cesium, (message) =>
+        reportError(new Error(message)),
+      ).then(addLayer, reportError);
+      return;
+    }
+
     try {
       const provider = createGibsWmsProvider(this.cesium, {
         layer: definition.gibsLayer,
@@ -508,14 +542,16 @@ export class StoryMapDirector implements StoryStage {
           `${definition.label} is unavailable for ${definition.date}. The story continues without it.`,
         );
       });
-
-      const layer = this.viewer.imageryLayers.addImageryProvider(provider);
-      layer.alpha = 0;
-      this.layers.set(id, { layer, target: 0 });
+      addLayer(provider);
     } catch (error) {
       console.error(`Unable to create story layer "${definition.gibsLayer}".`, error);
       this.options.onLayerError(`${definition.label} could not be loaded.`);
     }
+  }
+
+  /** Opacity a story layer should fade to in the current scene. */
+  private targetOpacity(id: StoryLayerId): number {
+    return this.currentScene?.enabledLayers.includes(id) ? (this.layerOpacity.get(id) ?? 1) : 0;
   }
 
   private removeAllLayers(): void {
@@ -541,11 +577,17 @@ export class StoryMapDirector implements StoryStage {
 
     switch (element.type) {
       case 'label':
-        this.attachLabel(state, element.text, element.position, 0);
+        this.attachLabel(state, element.text, element.position, 0, element.icon);
         break;
       case 'marker':
         state.entity = this.createEntity(state);
-        this.attachLabel(state, element.text, element.position, MARKER_LABEL_OFFSET_PX);
+        this.attachLabel(
+          state,
+          element.text,
+          element.position,
+          MARKER_LABEL_OFFSET_PX,
+          element.icon,
+        );
         break;
       default:
         state.entity = this.createEntity(state);
@@ -574,11 +616,22 @@ export class StoryMapDirector implements StoryStage {
     text: string,
     position: LonLat,
     offsetY: number,
+    icon?: StoryIconId,
   ): void {
+    // Anchor = optional pictogram + neon text box, positioned together.
     const label = document.createElement('div');
-    label.className = `astro-map-label is-${state.element.nature}`;
+    label.className = `astro-map-label-anchor is-${state.element.nature}`;
     label.style.setProperty('--label-color', state.element.color);
-    label.textContent = text;
+    if (icon) {
+      const badge = document.createElement('span');
+      badge.className = `astro-map-icon icon-${icon}`;
+      badge.append(createStoryIcon(icon));
+      label.append(badge);
+    }
+    const box = document.createElement('span');
+    box.className = `astro-map-label is-${state.element.nature}`;
+    box.textContent = text;
+    label.append(box);
     this.options.labelHost.appendChild(label);
 
     state.label = label;

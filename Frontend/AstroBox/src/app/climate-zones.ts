@@ -470,63 +470,8 @@ function createClimateProvider(
         return requested;
       }
 
-      const definition = encodeURIComponent(
-        JSON.stringify([
-          {
-            variableName: 'Koppen Geiger Class',
-            dimensionName: 'StdTime',
-            values: [Date.UTC(DATA_MIDPOINT_YEAR, 0, 1)],
-            isSlice: true,
-          },
-          {
-            variableName: 'Koppen Geiger Class',
-            dimensionName: 'SSP',
-            values: [SSP],
-            isSlice: true,
-          },
-        ]),
-      );
-      const url = `${IMAGE_SERVICE_URL}/tile/${level}/${y}/${x}?multidimensionalDefinition=${definition}`;
-      const promise = fetch(url)
-        .then(async (response) => {
-          if (!response.ok) {
-            throw new Error(`The climate image service returned HTTP ${response.status}.`);
-          }
-          const bytes = await response.arrayBuffer();
-          const decoder = await ensureDecoderReady();
-          const raster = decoder.decode(bytes);
-          const pixels = raster.pixels[0];
-          if (
-            !(pixels instanceof Uint8Array) ||
-            raster.width !== TILE_SIZE ||
-            raster.height !== TILE_SIZE
-          ) {
-            throw new Error('The climate image service returned an unsupported raster tile.');
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = TILE_SIZE;
-          canvas.height = TILE_SIZE;
-          const context = canvas.getContext('2d');
-          if (!context) {
-            throw new Error('Canvas 2D is not available for climate raster rendering.');
-          }
-          const image = context.createImageData(TILE_SIZE, TILE_SIZE);
-          for (let index = 0; index < pixels.length; index += 1) {
-            const climateClass =
-              raster.mask?.[index] === 0 ? undefined : CLASSES_BY_VALUE.get(pixels[index]);
-            if (!climateClass) {
-              continue;
-            }
-            const color = climateClass.color;
-            const output = index * 4;
-            image.data[output] = Number.parseInt(color.slice(1, 3), 16);
-            image.data[output + 1] = Number.parseInt(color.slice(3, 5), 16);
-            image.data[output + 2] = Number.parseInt(color.slice(5, 7), 16);
-            image.data[output + 3] = 220;
-          }
-          context.putImageData(image, 0, 0);
-          return { pixels, mask: raster.mask, canvas };
-        })
+      const promise = fetchClimateRaster(level, x, y)
+        .then((raster) => ({ ...raster, canvas: paintClimateRaster(raster) }))
         .then((tile) => {
           this.cache.set(key, tile);
           if (this.cache.size > TILE_CACHE_LIMIT) {
@@ -549,6 +494,112 @@ function createClimateProvider(
   }
 
   return new Provider();
+}
+
+interface DecodedClimateRaster {
+  pixels: Uint8Array;
+  mask: Uint8Array | null;
+}
+
+/** Downloads and decodes one Köppen-Geiger LERC tile (class values per pixel). */
+function fetchClimateRaster(level: number, x: number, y: number): Promise<DecodedClimateRaster> {
+  const definition = encodeURIComponent(
+    JSON.stringify([
+      {
+        variableName: 'Koppen Geiger Class',
+        dimensionName: 'StdTime',
+        values: [Date.UTC(DATA_MIDPOINT_YEAR, 0, 1)],
+        isSlice: true,
+      },
+      {
+        variableName: 'Koppen Geiger Class',
+        dimensionName: 'SSP',
+        values: [SSP],
+        isSlice: true,
+      },
+    ]),
+  );
+  const url = `${IMAGE_SERVICE_URL}/tile/${level}/${y}/${x}?multidimensionalDefinition=${definition}`;
+  return fetch(url).then(async (response) => {
+    if (!response.ok) {
+      throw new Error(`The climate image service returned HTTP ${response.status}.`);
+    }
+    const bytes = await response.arrayBuffer();
+    const decoder = await ensureDecoderReady();
+    const raster = decoder.decode(bytes);
+    const pixels = raster.pixels[0];
+    if (!(pixels instanceof Uint8Array) || raster.width !== TILE_SIZE || raster.height !== TILE_SIZE) {
+      throw new Error('The climate image service returned an unsupported raster tile.');
+    }
+    return { pixels, mask: raster.mask };
+  });
+}
+
+function paintClimateRaster({ pixels, mask }: DecodedClimateRaster): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = TILE_SIZE;
+  canvas.height = TILE_SIZE;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Canvas 2D is not available for climate raster rendering.');
+  }
+  const image = context.createImageData(TILE_SIZE, TILE_SIZE);
+  for (let index = 0; index < pixels.length; index += 1) {
+    const climateClass = mask?.[index] === 0 ? undefined : CLASSES_BY_VALUE.get(pixels[index]);
+    if (!climateClass) {
+      continue;
+    }
+    const color = climateClass.color;
+    const output = index * 4;
+    image.data[output] = Number.parseInt(color.slice(1, 3), 16);
+    image.data[output + 1] = Number.parseInt(color.slice(3, 5), 16);
+    image.data[output + 2] = Number.parseInt(color.slice(5, 7), 16);
+    image.data[output + 3] = 220;
+  }
+  context.putImageData(image, 0, 0);
+  return canvas;
+}
+
+/** Zoom level used for point lookups: ~1.8 km pixels, 4.3° tiles (few downloads while dragging). */
+const LOOKUP_LEVEL = 6;
+const LOOKUP_CACHE_LIMIT = 24;
+const lookupTiles = new Map<string, Promise<DecodedClimateRaster>>();
+
+/**
+ * Köppen-Geiger class at a coordinate, independent of whether the Climate
+ * Zones layer is visible (used by Verny's soundscape). Resolves to undefined
+ * over oceans and data gaps.
+ */
+export async function lookupClimateClass(
+  longitude: number,
+  latitude: number,
+): Promise<ClimateClass | undefined> {
+  if (typeof fetch !== 'function' || typeof document === 'undefined') {
+    return undefined;
+  }
+  const span = (FIRST_LEVEL_RESOLUTION_DEGREES * TILE_SIZE) / 2 ** LOOKUP_LEVEL;
+  const lon = ((((longitude + 180) % 360) + 360) % 360) - 180;
+  const lat = Math.min(Math.max(latitude, -89.999), 89.999);
+  const x = Math.floor((lon + 180) / span);
+  const y = Math.floor((90 - lat) / span);
+  const key = `${y}/${x}`;
+  let request = lookupTiles.get(key);
+  if (!request) {
+    request = fetchClimateRaster(LOOKUP_LEVEL, x, y);
+    lookupTiles.set(key, request);
+    request.catch(() => lookupTiles.delete(key));
+    if (lookupTiles.size > LOOKUP_CACHE_LIMIT) {
+      const oldest = lookupTiles.keys().next().value;
+      if (oldest !== undefined) {
+        lookupTiles.delete(oldest);
+      }
+    }
+  }
+  const raster = await request;
+  const pixelX = Math.min(Math.floor(((lon - (-180 + x * span)) / span) * TILE_SIZE), TILE_SIZE - 1);
+  const pixelY = Math.min(Math.floor(((90 - y * span - lat) / span) * TILE_SIZE), TILE_SIZE - 1);
+  const index = pixelY * TILE_SIZE + pixelX;
+  return raster.mask?.[index] === 0 ? undefined : CLASSES_BY_VALUE.get(raster.pixels[index]);
 }
 
 export function climateClassForValue(value: number): ClimateClass | undefined {

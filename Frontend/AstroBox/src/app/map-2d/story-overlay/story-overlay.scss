@@ -149,6 +149,37 @@ button {
   }
 }
 
+.story-cards {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.story-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.7rem 0.75rem 0.75rem;
+  border-left: 2px solid var(--astro-teal-bright);
+  background: rgba(255, 255, 255, 0.04);
+
+  strong {
+    font-size: 1rem;
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+.story-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
 .story-duration {
   color: var(--astro-teal-bright);
   font-size: 0.7rem;
@@ -406,6 +437,10 @@ button {
 
   &.rain {
     background: linear-gradient(90deg, #2968a8, #47c9d2, #b5f4e3);
+  }
+
+  &.koppen {
+    background: linear-gradient(90deg, #db9a32, #c27d35, #cf9a73, #43aa93, #237c50);
   }
 
   &.dashed {

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "astrobox",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "Frontend/AstroBox", "run", "start", "--", "--port", "4200"],
+      "port": 4200
+    }
+  ]
+}

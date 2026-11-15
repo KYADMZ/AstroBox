@@ -33,6 +33,8 @@ import { WindFieldStore } from './wind/wind-field.store';
 import { WindLayerComponent } from './wind/wind-layer';
 import { WIND_SPEED_COLORS } from './wind/wind-streamline-renderer';
 import { createCesiumProbeAdapter } from './zone-probe/cesium-probe-adapter';
+import { ambienceForClimateCode } from './zone-probe/soundscape/climate-ambience';
+import { SOUND_CATEGORIES } from './zone-probe/soundscape/sound-mix';
 import { SoundscapeService } from './zone-probe/soundscape/soundscape.service';
 import { EnvironmentEffectsComponent } from './zone-probe/environment-effects/environment-effects';
 import { MascotProbeComponent } from './zone-probe/mascot-probe/mascot-probe';
@@ -171,15 +173,27 @@ export class App implements AfterViewInit, OnDestroy {
     }
   });
 
-  /** Procedural rain, wind and fire sounds for the zone under Verny. */
+  /** Procedural rain, wind, fire and climate-zone sounds for the zone under Verny. */
   protected readonly soundscape = inject(SoundscapeService);
-  private readonly soundscapeSync = effect(() =>
-    this.soundscape.setTargets(
-      this.storyActive()
-        ? { rain: 0, fire: 0, windSpeedMs: 0 }
-        : this.zoneProbe.effectTargets(),
-    ),
+  protected readonly soundCategories = SOUND_CATEGORIES;
+  /** The sound mixer (per-category switches) is a small popover by the sound button. */
+  protected readonly soundMixerOpen = signal(false);
+  /** Nature soundscape for the climate zone under Verny (once it is dropped). */
+  protected readonly zoneAmbience = computed(() =>
+    ambienceForClimateCode(this.zoneProbe.climateZone()?.code),
   );
+  private readonly soundscapeSync = effect(() => {
+    if (this.storyActive()) {
+      this.soundscape.setZone({ targets: { rain: 0, fire: 0, windSpeedMs: 0 }, whistle: 0, ambience: null });
+      return;
+    }
+    const placed = this.zoneProbe.phase() === 'placed';
+    this.soundscape.setZone({
+      targets: this.zoneProbe.effectTargets(),
+      whistle: this.zoneProbe.strongWind(),
+      ambience: placed ? (this.zoneAmbience()?.levels ?? null) : null,
+    });
+  });
   protected readonly sliderProgress = computed(
     () => (this.selectedMonthIndex() / (this.months.length - 1)) * 100,
   );
@@ -330,12 +344,20 @@ export class App implements AfterViewInit, OnDestroy {
     this.seaTemperatureController?.setOpacity(opacity);
   }
 
+  protected toggleSoundMixer(): void {
+    this.soundMixerOpen.update((open) => !open);
+  }
+
   protected setLayerPanelMinimized(minimized: boolean): void {
     this.layerPanelMinimized.set(minimized);
   }
 
   /** Keyboard shortcuts shown in the hint bar: Q/E map mode, L layers, Space timeline. */
   protected onKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this.soundMixerOpen()) {
+      this.soundMixerOpen.set(false);
+      return;
+    }
     const target = event.target;
     if (
       event.ctrlKey ||

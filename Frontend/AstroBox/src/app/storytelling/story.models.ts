@@ -6,6 +6,9 @@
  * with Cesium. Nothing here depends on Cesium or on the 3D globe.
  */
 
+import type { AmbienceLevels } from '../zone-probe/soundscape/sound-mix';
+import type { StoryIconId } from './story-icons';
+
 /** Geographic coordinate as [longitude, latitude] in degrees. */
 export type LonLat = readonly [longitude: number, latitude: number];
 
@@ -57,11 +60,16 @@ export interface CameraWaypoint {
 }
 
 /** Identifiers of the data layers a story can enable. */
-export type StoryLayerId = 'seaSurfaceTemperatureAnomaly' | 'precipitationRate';
+export type StoryLayerId = 'seaSurfaceTemperatureAnomaly' | 'precipitationRate' | 'climateZones';
 
-/** A real, observed data layer served by NASA GIBS. */
+/**
+ * A real data layer: NASA GIBS imagery (default) or the Köppen-Geiger
+ * climate classification raster used by the Climate Zones visualization.
+ */
 export interface StoryLayerDefinition {
   readonly id: StoryLayerId;
+  readonly source?: 'gibs' | 'koppen';
+  /** GIBS layer name (ignored for the Köppen-Geiger source). */
   readonly gibsLayer: string;
   /** ISO date (YYYY-MM-DD) requested through the WMS TIME parameter. */
   readonly date: string;
@@ -121,12 +129,15 @@ export interface LabelElement extends VisualElementBase {
   readonly type: 'label';
   readonly position: LonLat;
   readonly text: string;
+  /** Small pictogram shown next to the label box (flood, drought, wind…). */
+  readonly icon?: StoryIconId;
 }
 
 export interface MarkerElement extends VisualElementBase {
   readonly type: 'marker';
   readonly position: LonLat;
   readonly text: string;
+  readonly icon?: StoryIconId;
 }
 
 export type StoryVisualElement =
@@ -163,6 +174,23 @@ export interface StorySceneCues {
   readonly mascotAnimationId?: string;
 }
 
+/** Sound channels a story can drive (weather plus nature beds). */
+export type StorySoundChannel = 'rain' | 'wind' | 'whistle' | keyof AmbienceLevels;
+
+/**
+ * A sound that plays during part of a scene, e.g. rain while the "wetter"
+ * zones are on screen. Levels are 0–1; overlapping cues on the same channel
+ * use the loudest one. Changes fade in and out smoothly.
+ */
+export interface StoryAudioCue {
+  readonly channel: StorySoundChannel;
+  readonly level: number;
+  /** Milliseconds after the scene starts. Defaults to 0. */
+  readonly fromMs?: number;
+  /** Milliseconds after the scene starts. Defaults to the end of the scene. */
+  readonly untilMs?: number;
+}
+
 export interface StoryScene {
   readonly id: string;
   readonly title: string;
@@ -179,6 +207,8 @@ export interface StoryScene {
   /** Optional cause-and-effect summary rendered in the narration panel. */
   readonly summarySteps?: readonly StorySummaryStep[];
   readonly cues?: StorySceneCues;
+  /** Ambient soundtrack of the scene. */
+  readonly audio?: readonly StoryAudioCue[];
   readonly onEnter?: (context: StorySceneContext) => void;
   readonly onExit?: (context: StorySceneContext) => void;
 }
@@ -186,7 +216,10 @@ export interface StoryScene {
 export interface StoryDefinition {
   readonly id: string;
   readonly title: string;
-  readonly layers: Readonly<Record<StoryLayerId, StoryLayerDefinition>>;
+  /** Short teaser shown in the story launcher. */
+  readonly description: string;
+  /** Data layers used by the story's scenes. */
+  readonly layers: Readonly<Partial<Record<StoryLayerId, StoryLayerDefinition>>>;
   readonly scenes: readonly StoryScene[];
 }
 

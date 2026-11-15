@@ -1,7 +1,32 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { EL_NINO_STORY } from '../../storytelling/el-nino-story';
+import { RAIN_SHADOW_STORY } from '../../storytelling/rain-shadow-story';
+import { storySoundMix } from '../../storytelling/story-audio';
 import { StoryPlayerService } from '../../storytelling/story-player.service';
-import type { StoryLayerDefinition, StoryLayerId } from '../../storytelling/story.models';
+import type {
+  StoryDefinition,
+  StoryLayerDefinition,
+  StoryLayerId,
+} from '../../storytelling/story.models';
+import { SILENT_MIX } from '../../zone-probe/soundscape/sound-mix';
+import { SoundscapeService } from '../../zone-probe/soundscape/soundscape.service';
+
+/** Guided stories offered on the 2D map, longest first. */
+const STORIES: readonly StoryDefinition[] = [EL_NINO_STORY, RAIN_SHADOW_STORY];
+
+interface StoryCard {
+  story: StoryDefinition;
+  sceneCount: number;
+  durationSeconds: number;
+}
 
 /** Neon cyan: default accent for the ocean-focused story. */
 const DEFAULT_ACCENT = '#3ef0ff';
@@ -29,17 +54,37 @@ interface SceneIndicator {
 })
 export class StoryOverlayComponent {
   protected readonly player = inject(StoryPlayerService);
-  protected readonly story = EL_NINO_STORY;
-  protected readonly sceneCount = this.story.scenes.length;
-  protected readonly totalDurationLabel = formatDuration(
-    this.story.scenes.reduce((sum, scene) => sum + scene.durationMs, 0),
-  );
-  protected readonly estimatedDurationSeconds = Math.round(
-    this.story.scenes.reduce((sum, scene) => sum + scene.durationMs, 0) / 1000,
+  private readonly soundscape = inject(SoundscapeService);
+  protected readonly storyCards: StoryCard[] = STORIES.map((story) => ({
+    story,
+    sceneCount: story.scenes.length,
+    durationSeconds: Math.round(totalDuration(story) / 1000),
+  }));
+  /** The story being played (or the first one before any story starts). */
+  protected readonly story = computed(() => this.player.story() ?? STORIES[0]);
+  protected readonly sceneCount = computed(() => this.story().scenes.length);
+  protected readonly totalDurationLabel = computed(() =>
+    formatDuration(totalDuration(this.story())),
   );
   protected readonly expanded = signal(false);
 
   protected readonly scene = this.player.currentScene;
+
+  constructor() {
+    // Story soundtrack: rain where it gets wetter, dry wind where it dries…
+    effect(() => {
+      const status = this.player.status();
+      const scene = this.scene();
+      if (!this.player.isActive() || !scene) {
+        this.soundscape.setStoryMix(null);
+      } else if (status === 'paused') {
+        this.soundscape.setStoryMix(SILENT_MIX);
+      } else {
+        this.soundscape.setStoryMix(storySoundMix(scene, this.player.sceneElapsedMs()));
+      }
+    });
+    inject(DestroyRef).onDestroy(() => this.soundscape.setStoryMix(null));
+  }
   protected readonly sceneNumber = computed(() => this.player.sceneIndex() + 1);
   protected readonly elapsedLabel = computed(() =>
     formatDuration(this.player.storyElapsedMs()),
@@ -48,7 +93,7 @@ export class StoryOverlayComponent {
   protected readonly sceneIndicators = computed<SceneIndicator[]>(() => {
     const currentIndex = this.player.sceneIndex();
     const sceneProgress = this.player.sceneProgress();
-    return this.story.scenes.map((scene, index) => ({
+    return this.story().scenes.map((scene, index) => ({
       id: scene.id,
       title: scene.title,
       state: index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming',
@@ -100,7 +145,9 @@ export class StoryOverlayComponent {
     if (!scene || !story) {
       return [];
     }
-    return scene.enabledLayers.map((id: StoryLayerId) => story.layers[id]);
+    return scene.enabledLayers
+      .map((id: StoryLayerId) => story.layers[id])
+      .filter((layer): layer is StoryLayerDefinition => layer !== undefined);
   });
 
   /** Captions of illustrative elements currently on the map. */
@@ -122,9 +169,9 @@ export class StoryOverlayComponent {
     return [...captions].map(([caption, color]) => ({ caption, color }));
   });
 
-  protected start(): void {
+  protected start(story: StoryDefinition): void {
     this.expanded.set(false);
-    this.player.start(this.story);
+    this.player.start(story);
   }
 
   protected open(): void {
@@ -154,6 +201,10 @@ export class StoryOverlayComponent {
       this.collapse();
     }
   }
+}
+
+function totalDuration(story: StoryDefinition): number {
+  return story.scenes.reduce((sum, scene) => sum + scene.durationMs, 0);
 }
 
 function formatDuration(ms: number): string {

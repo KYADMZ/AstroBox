@@ -26,21 +26,65 @@
     </nav>
 
     <div class="topbar-tools">
-    <button
-      type="button"
-      class="sound-toggle"
-      [class.is-on]="soundscape.enabled()"
-      [attr.aria-pressed]="soundscape.enabled()"
-      aria-keyshortcuts="M"
-      [attr.aria-label]="soundscape.enabled() ? 'Mute zone sounds' : 'Turn on zone sounds'"
-      (click)="soundscape.toggle()"
-    >
-      @if (soundscape.enabled()) {
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></svg>
-      } @else {
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM16 9.5l5 5M21 9.5l-5 5" /></svg>
+    <div class="sound-controls">
+      <button
+        type="button"
+        class="sound-toggle"
+        [class.is-on]="soundscape.enabled()"
+        [attr.aria-pressed]="soundscape.enabled()"
+        aria-keyshortcuts="M"
+        [attr.aria-label]="soundscape.enabled() ? 'Mute all sounds' : 'Turn on sounds'"
+        (click)="soundscape.toggle()"
+      >
+        @if (soundscape.enabled()) {
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></svg>
+        } @else {
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM16 9.5l5 5M21 9.5l-5 5" /></svg>
+        }
+      </button>
+      <button
+        type="button"
+        class="sound-mixer-toggle"
+        [class.is-open]="soundMixerOpen()"
+        [attr.aria-expanded]="soundMixerOpen()"
+        aria-controls="sound-mixer"
+        aria-label="Choose which sounds Verny plays"
+        (click)="toggleSoundMixer()"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v16M12 4v16M19 4v16" /><path d="M3 15h4M10 8h4M17 13h4" /></svg>
+      </button>
+      @if (soundMixerOpen()) {
+        <section id="sound-mixer" class="sound-mixer" aria-label="Sound categories">
+          <header>
+            <span class="kicker">SOUNDS WITH VERNY</span>
+            <button type="button" class="mixer-close" aria-label="Close sound menu" (click)="toggleSoundMixer()">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" /></svg>
+            </button>
+          </header>
+          @if (!soundscape.enabled()) {
+            <p class="mixer-note">All sounds are muted. Press <kbd>M</kbd> or the speaker to turn them on.</p>
+          }
+          <ul>
+            @for (category of soundCategories; track category.id) {
+              <li>
+                <label class="mixer-row" [class.is-off]="!soundscape.categories()[category.id]">
+                  <input
+                    type="checkbox"
+                    [checked]="soundscape.categories()[category.id]"
+                    (change)="soundscape.toggleCategory(category.id)"
+                  />
+                  <span class="mixer-switch" aria-hidden="true"></span>
+                  <span class="mixer-text">
+                    <strong>{{ category.label }}</strong>
+                    <small>{{ category.hint }}</small>
+                  </span>
+                </label>
+              </li>
+            }
+          </ul>
+        </section>
       }
-    </button>
+    </div>
     <div class="readout" aria-live="polite">
       <span class="readout-row">
         <span>Selected month</span>

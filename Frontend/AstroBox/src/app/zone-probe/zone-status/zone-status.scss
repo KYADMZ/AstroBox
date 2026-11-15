@@ -139,6 +139,10 @@
     --reading-color: #c9d6ff;
   }
 
+  &.climate-zone {
+    grid-column: 1 / -1;
+  }
+
   &.is-alert strong {
     color: #ffad88;
   }

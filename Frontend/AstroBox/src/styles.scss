@@ -76,11 +76,35 @@ body {
 /* Story labels drawn as HTML on top of the 2D map (created by StoryMapDirector) */
 /* ------------------------------------------------------------------------- */
 
-.astro-map-label {
+/* Positioned wrapper: optional pictogram + text box. */
+.astro-map-label-anchor {
   --label-color: var(--astro-neon-cyan);
   position: absolute;
   top: 0;
   left: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 420ms ease;
+  will-change: transform, opacity;
+
+  &.is-visible {
+    opacity: 1;
+
+    .astro-map-icon {
+      animation: astro-icon-pop 520ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+    }
+  }
+
+  &.is-hidden {
+    visibility: hidden;
+  }
+}
+
+.astro-map-label {
+  display: block;
   padding: 0.3rem 0.7rem 0.32rem;
   border: 1px solid color-mix(in srgb, var(--label-color) 70%, transparent);
   /* Dark enough to read neon text over any imagery. */
@@ -93,18 +117,10 @@ body {
   font-weight: 600;
   letter-spacing: 0.04em;
   line-height: 1.2;
-  opacity: 0;
-  pointer-events: none;
   text-shadow:
     0 0 0.25rem var(--label-color),
     0 0 0.8rem color-mix(in srgb, var(--label-color) 65%, transparent);
-  transition: opacity 420ms ease;
   white-space: nowrap;
-  will-change: transform, opacity;
-
-  &.is-visible {
-    opacity: 1;
-  }
 
   &.is-illustrative {
     border-style: dashed;
@@ -117,14 +133,48 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.12em;
   }
+}
 
-  &.is-hidden {
-    visibility: hidden;
+/* Small pictogram beside a label (flood, drought, wind…). */
+.astro-map-icon {
+  display: grid;
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--label-color) 70%, transparent);
+  border-radius: 50%;
+  background: rgba(5, 7, 14, 0.82);
+  box-shadow:
+    0 0 0.6rem color-mix(in srgb, var(--label-color) 45%, transparent),
+    inset 0 0 0.5rem color-mix(in srgb, var(--label-color) 22%, transparent);
+  color: var(--label-color);
+
+  svg {
+    width: 1.05rem;
+    height: 1.05rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.7;
+    filter: drop-shadow(0 0 0.18rem var(--label-color));
+  }
+}
+
+@keyframes astro-icon-pop {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .astro-map-label {
+  .astro-map-label-anchor {
     transition: none;
+  }
+
+  .astro-map-label-anchor.is-visible .astro-map-icon {
+    animation: none;
   }
 }

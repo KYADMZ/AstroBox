@@ -60,6 +60,28 @@
           <small>10 m average · strongest day {{ formatWind(store.climate()?.maxWindSpeedMs ?? null) }}</small>
         </dd>
       </div>
+
+      <div class="reading climate-zone" [style.--reading-color]="store.climateZone()?.color ?? null">
+        <dt>Climate zone</dt>
+        <dd>
+          @if (store.climateZone(); as zone) {
+            <strong>{{ zone.code }} · {{ zone.name }}</strong>
+            <small>
+              @if (zoneSoundscape()) {
+                Soundscape: {{ zoneSoundscape() }} ·
+              }
+              Köppen-Geiger 1991–2020
+            </small>
+          } @else if (store.climateZoneStatus() === 'loading') {
+            <strong>Identifying…</strong>
+          } @else if (store.climateZoneStatus() === 'error') {
+            <strong>Unavailable</strong>
+          } @else {
+            <strong>Ocean or no data</strong>
+            <small>No land climate class here</small>
+          }
+        </dd>
+      </div>
     </dl>
 
     @if (store.climateError()) {
