@@ -8,7 +8,13 @@
   position: fixed;
   z-index: 1000;
   inset: 0;
-  /* The spotlight's huge shadow does the dimming; this layer only blocks clicks. */
+  background: transparent;
+  pointer-events: none;
+}
+
+.tour-blocker {
+  position: fixed;
+  z-index: 1000;
   background: transparent;
 }
 

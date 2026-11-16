@@ -19,7 +19,7 @@ interface TourStep {
   text: string;
 }
 
-/** Each step advances by itself after this long: 7 steps ≈ 28 s in total. */
+/** Each step advances by itself after this long. */
 const STEP_MS = 4_000;
 const SEEN_KEY = 'astrobox.tour.seen';
 const SPOTLIGHT_PADDING = 6;
@@ -29,41 +29,43 @@ const STEPS: readonly TourStep[] = [
   {
     targets: ['.brand'],
     title: 'Welcome to AstroBox',
-    text: 'An Earth Jukebox: NASA data you can see, hear and feel.',
+    text: "NASA's changing Earth becomes a jukebox of sights, sounds and stories.",
   },
   {
     targets: ['.mode-tabs'],
     title: 'Globe or map',
-    text: 'Switch between the 3D globe and the 2D map (Q / E).',
+    text: 'Set out from a 3D globe, then unfold the planet into a 2D map (Q / E).',
   },
   {
     targets: ['app-layer-panel'],
     title: 'Data layers',
-    text: 'Turn NASA layers on or off: rain, fires, temperature, wind, climate zones.',
+    text: 'Reveal rain, fires, heat, wind and climate layer by layer.',
   },
   {
     targets: ['app-mascot-probe .mascot'],
     title: 'Meet Verny',
-    text: 'Drag Verny anywhere on Earth: it reads the data, plays its sounds and reacts.',
+    text: 'Drop Verny anywhere: it samples local conditions and responds to what it finds.',
   },
   {
     targets: ['.sound-controls'],
     title: 'Sounds',
-    text: 'Mute everything (M) or choose which sounds you hear.',
+    text: 'Turn the landscape into sound; tune the mix or mute it any time (M).',
   },
   {
     targets: ['.timeline'],
     title: 'Timeline',
-    text: 'Travel through the last six months, or press Space to play.',
+    text: 'Watch six months of Earth change, or press Space to set time in motion.',
   },
   {
     targets: ['.story-entry', '.mode-tabs .mode-tab:last-of-type'],
     title: 'Guided stories',
-    text: 'On the 2D map, open a guided story (El Niño and more) with sound.',
+    text: 'Take the 2D map into guided journeys like El Niño, with maps and sound.',
   },
 ];
 
-/** Starts and stops the quick guide; shared by the app and the guide overlay. */
+const DEMO_DURATION_MS = STEP_MS * STEPS.length;
+
+/** Starts and stops the quick demo; shared by the app and the demo overlay. */
 @Injectable({ providedIn: 'root' })
 export class QuickTourService {
   private readonly browser = isPlatformBrowser(inject(PLATFORM_ID));
@@ -73,7 +75,7 @@ export class QuickTourService {
   readonly step = this.stepState.asReadonly();
   readonly active = computed(() => this.stepState() >= 0);
 
-  /** Shows the guide once, the first time someone opens the app. */
+  /** Shows the demo once, the first time someone opens the app. */
   startIfFirstVisit(): void {
     if (!this.browser) {
       return;
@@ -124,8 +126,8 @@ interface Box {
 }
 
 /**
- * Quick guide overlay: dims the app, spotlights one feature at a time and
- * shows a short tooltip next to it. Advances by itself every 4 seconds.
+ * Quick demo overlay: spotlights the app's main features in seven 4-second
+ * scenes, with a hard 28-second limit.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -134,6 +136,16 @@ interface Box {
   template: `
     @if (tour.active() && current(); as step) {
       <div class="tour-backdrop" aria-hidden="true"></div>
+      @for (blocker of interactionBlockers(); track $index) {
+        <div
+          class="tour-blocker"
+          aria-hidden="true"
+          [style.top.px]="blocker.top"
+          [style.left.px]="blocker.left"
+          [style.width.px]="blocker.width"
+          [style.height.px]="blocker.height"
+        ></div>
+      }
       @if (spotlight(); as box) {
         <div
           class="tour-spotlight"
@@ -186,24 +198,44 @@ export class QuickTourComponent {
   protected readonly tooltipWidth = TOOLTIP_WIDTH;
   protected readonly current = computed(() => this.tour.steps[this.tour.step()] ?? null);
   protected readonly spotlight = signal<Box | null>(null);
+  protected readonly interactionBlockers = signal<Box[]>([], { equal: sameBoxes });
   protected readonly tooltip = computed(() => this.placeTooltip(this.spotlight()));
 
   private frame?: number;
   private timer?: ReturnType<typeof setTimeout>;
+  private startedAt?: number;
 
   constructor() {
     effect((onCleanup) => {
       const step = this.tour.step();
       if (step < 0) {
+        this.startedAt = undefined;
         return;
+      }
+      if (this.startedAt === undefined) {
+        this.startedAt = performance.now();
       }
       // Follow the highlighted element (it may move or animate).
       const track = (): void => {
         this.spotlight.set(this.measure(this.tour.steps[step]));
+        this.interactionBlockers.set(this.measureInteractionBlockers());
         this.frame = requestAnimationFrame(track);
       };
       track();
-      this.timer = setTimeout(() => this.tour.next(), STEP_MS);
+      const remainingMs = Math.max(
+        0,
+        DEMO_DURATION_MS - (performance.now() - this.startedAt),
+      );
+      this.timer = setTimeout(
+        () => {
+          if (remainingMs <= STEP_MS) {
+            this.tour.finish();
+          } else {
+            this.tour.next();
+          }
+        },
+        Math.min(STEP_MS, remainingMs),
+      );
       onCleanup(() => this.stop());
     });
     inject(DestroyRef).onDestroy(() => this.stop());
@@ -211,6 +243,13 @@ export class QuickTourComponent {
 
   protected onKeydown(event: KeyboardEvent): void {
     if (!this.tour.active()) {
+      return;
+    }
+    if (
+      event.key !== 'Escape' &&
+      event.target instanceof HTMLElement &&
+      event.target.closest('.mascot')
+    ) {
       return;
     }
     switch (event.key) {
@@ -265,7 +304,30 @@ export class QuickTourComponent {
           : box;
       }
     }
+
     return null;
+  }
+
+  private measureInteractionBlockers(): Box[] {
+    const rect = document.querySelector<HTMLElement>('.mascot')?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) {
+      return [{ top: 0, left: 0, width: innerWidth, height: innerHeight }];
+    }
+
+    const top = Math.max(Math.floor((rect.top - 8) / 8) * 8, 0);
+    const left = Math.max(Math.floor((rect.left - 8) / 8) * 8, 0);
+    const right = Math.min(Math.ceil((rect.right + 8) / 8) * 8, innerWidth);
+    const bottom = Math.min(Math.ceil((rect.bottom + 8) / 8) * 8, innerHeight);
+    if (right <= left || bottom <= top) {
+      return [{ top: 0, left: 0, width: innerWidth, height: innerHeight }];
+    }
+
+    return [
+      { top: 0, left: 0, width: innerWidth, height: top },
+      { top, left: 0, width: left, height: bottom - top },
+      { top, left: right, width: innerWidth - right, height: bottom - top },
+      { top: bottom, left: 0, width: innerWidth, height: innerHeight - bottom },
+    ].filter((box) => box.width > 0 && box.height > 0);
   }
 
   /** Below the element when there is room, otherwise above it; centered and kept on screen. */
@@ -298,4 +360,17 @@ export class QuickTourComponent {
         : Math.min(box.left + box.width + gap, innerWidth - TOOLTIP_WIDTH - gap);
     return { top, left };
   }
+}
+
+function sameBoxes(left: readonly Box[], right: readonly Box[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (box, index) =>
+        box.top === right[index].top &&
+        box.left === right[index].left &&
+        box.width === right[index].width &&
+        box.height === right[index].height,
+    )
+  );
 }

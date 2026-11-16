@@ -36,6 +36,14 @@ ng build
 
 This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
 
+## Quick demo
+
+Select the play button in the header to see a spotlight tour of AstroBox's
+globe and map, data layers, Verny, sounds, timeline, and guided stories. The
+seven scenes advance automatically and the demo ends after 28 seconds; press
+**Skip**, **Esc**, or **Done** to exit sooner. Verny remains draggable while
+the demo is running.
+
 ## Running unit tests
 
 To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
