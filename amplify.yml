@@ -1,0 +1,28 @@
+# AWS Amplify Hosting build settings (monorepo).
+# The Angular app lives in Frontend/AstroBox. Amplify runs these commands
+# inside appRoot, and baseDirectory is relative to appRoot.
+# All routes are prerendered, so the static browser build is deployed
+# (no SSR compute needed).
+version: 1
+applications:
+  - appRoot: Frontend/AstroBox
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            # Angular 22 needs Node ^22.22.3 or ^24.15.0; install the latest 22.x.
+            - nvm install 22
+            - nvm use 22
+            - node -v
+            - npm -v
+            - npm ci
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: dist/AstroBox/browser
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
